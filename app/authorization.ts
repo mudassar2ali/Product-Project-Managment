@@ -81,6 +81,11 @@ export class AuthorizationError extends Error {
 }
 
 export function createPrincipal(user: ChatGPTUser, roleCodes: RoleCode[] = ["EXECUTIVE_VIEWER"]): Principal {
+  // The private-site owner is the controlled bootstrap administrator until
+  // database-managed role assignments become available in Administration.
+  if (roleCodes.length === 1 && roleCodes[0] === "EXECUTIVE_VIEWER" && user.email.toLowerCase() === "mudassar2ali@gmail.com") {
+    roleCodes = ["ADMINISTRATOR"];
+  }
   const validRoles = [...new Set(roleCodes)].filter((role): role is RoleCode => role in rolePermissions);
   const effectiveRoles = validRoles.length ? validRoles : ["EXECUTIVE_VIEWER"];
   const effectivePermissions = [...new Set(effectiveRoles.flatMap((role) => rolePermissions[role]))];

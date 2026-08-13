@@ -8,6 +8,20 @@
       "when": 1786624580744,
       "tag": "0000_long_sprite",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1786625299125,
+      "tag": "0001_gray_wallflower",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1786625943552,
+      "tag": "0002_slim_sersi",
+      "breakpoints": true
     }
   ]
 }

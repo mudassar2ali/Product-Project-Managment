@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 
-async function render(path = "/", authenticated = true) {
+async function render(path = "/", authenticated = true, init = {}) {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
   const { default: worker } = await import(workerUrl.href);
   return worker.fetch(
     new Request(`http://localhost${path}`, {
+      ...init,
       headers: {
         accept: path.startsWith("/api/") ? "application/json" : "text/html",
         ...(authenticated
@@ -18,6 +19,7 @@ async function render(path = "/", authenticated = true) {
               "oai-authenticated-user-full-name-encoding": "percent-encoded-utf-8",
             }
           : {}),
+        ...(init.headers ?? {}),
       },
     }),
     { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
@@ -39,6 +41,28 @@ test("server-renders the Stage 1 application shell", async () => {
   assert.match(html, /no fabricated portfolio statistics/i);
   assert.match(html, /Skip to content/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
+});
+
+test("enforces Product write permission before database access", async () => {
+  const response = await render("/api/v1/products", true, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "Unauthorized Product", code: "NOPE" }),
+  });
+  assert.equal(response.status, 403);
+  const body = await response.json();
+  assert.equal(body.error.code, "FORBIDDEN");
+});
+
+test("enforces Project write permission before database access", async () => {
+  const response = await render("/api/v1/projects", true, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "Unauthorized Project", code: "NOPE", productId: "x" }),
+  });
+  assert.equal(response.status, 403);
+  const body = await response.json();
+  assert.equal(body.error.code, "FORBIDDEN");
 });
 
 test("redirects anonymous browser requests to the platform sign-in flow", async () => {

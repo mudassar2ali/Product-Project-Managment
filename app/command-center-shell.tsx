@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import type { ChatGPTUser } from "./chatgpt-auth";
 import type { PermissionCode, Principal } from "./authorization";
+import { ProductPortfolio } from "./products/product-portfolio";
+import { ProjectPortfolio } from "./projects/project-portfolio";
 
 type NavItem = {
   label: string;
@@ -141,7 +143,11 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
             <div className="step-chip">Implementation step {current?.step ?? 1}</div>
           </section>
 
-          <section className="foundation-panel" aria-labelledby="foundation-title">
+          {active === "Products" ? (
+            <ProductPortfolio canCreate={principal.permissions.includes("product.create")} canEdit={principal.permissions.includes("product.edit")} />
+          ) : active === "Projects" ? (
+            <ProjectPortfolio canCreate={principal.permissions.includes("project.create")} canEdit={principal.permissions.includes("project.edit")} />
+          ) : <><section className="foundation-panel" aria-labelledby="foundation-title">
             <div className="foundation-copy">
               <div className="foundation-icon" aria-hidden="true">⌁</div>
               <div>
@@ -185,6 +191,7 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
             <div><span className="principle-icon data" aria-hidden="true">≡</span><div><strong>Persisted truth</strong><p>Business data will come from relational storage.</p></div></div>
             <div><span className="principle-icon trace" aria-hidden="true">↗</span><div><strong>Full traceability</strong><p>Governed changes create an audit history.</p></div></div>
           </section>
+          </>}
         </main>
       </div>
     </div>
