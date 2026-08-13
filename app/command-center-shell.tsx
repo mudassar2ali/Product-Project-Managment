@@ -11,6 +11,7 @@ import { MilestoneCenter } from "./milestones/milestone-center";
 import { RaidCenter } from "./raid/raid-center";
 import { IdeaCenter } from "./ideas/idea-center";
 import { ExecutiveDashboard } from "./dashboard/executive-dashboard";
+import { ReportCenter } from "./reports/report-center";
 
 type NavItem = {
   label: string;
@@ -144,6 +145,7 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
               <h1>{active}</h1>
               <p>{active === "Dashboard"
                 ? "A single operational view of products, projects, delivery health and management attention."
+                : active === "Reports" ? "Controlled portfolio reports generated directly from persisted management evidence."
                 : `${active} is included in the approved Stage 1 delivery sequence.`}
               </p>
             </div>
@@ -162,6 +164,8 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
             <RaidCenter canCreate={principal.permissions.includes("raid.create")} canEscalate={principal.permissions.includes("raid.escalate")} />
           ) : active === "Ideas" ? (
             <IdeaCenter canCreate={principal.permissions.includes("idea.create")} canReview={principal.permissions.includes("idea.review")} canConvert={principal.permissions.includes("idea.convert")} />
+          ) : active === "Reports" ? (
+            <ReportCenter canExport={principal.permissions.includes("report.export")} />
           ) : active === "Integrations" ? (
             <><IntegrationCenter canConfigure={principal.permissions.includes("integration.configure")} /><AzureSyncPanel canSync={principal.permissions.includes("integration.sync")} /></>
           ) : <><section className="foundation-panel" aria-labelledby="foundation-title">
