@@ -1,0 +1,3 @@
+import { authorizeApi,apiError,isResponse } from "../../../api-helpers";
+export const dynamic="force-dynamic";
+export async function DELETE(_request:Request,{params}:{params:Promise<{id:string}>}){const context=await authorizeApi("integration.configure");if(isResponse(context))return context;const{id}=await params;const{archiveAzureProjectLink}=await import("../../../../../../db/azure-project-links");const result=await archiveAzureProjectLink(id,context.principal.user.userId,context.correlationId);if(result.kind==="not_found")return apiError(404,"AZURE_PROJECT_LINK_NOT_FOUND","Azure Project link was not found.",context.correlationId,context.timestamp);return new Response(null,{status:204,headers:{"cache-control":"no-store"}});}

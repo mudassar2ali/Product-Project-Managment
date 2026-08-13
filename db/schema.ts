@@ -204,3 +204,23 @@ export const azureConnections = sqliteTable("azure_connections", {
   index("idx_azure_connections_status").on(table.status, table.enabled),
   index("idx_azure_connections_record_status").on(table.recordStatus),
 ]);
+
+export const azureProjectLinks = sqliteTable("azure_project_links", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  connectionId: text("connection_id").notNull().references(() => azureConnections.id, { onDelete: "cascade" }),
+  azureProjectId: text("azure_project_id").notNull(),
+  azureProjectName: text("azure_project_name").notNull(),
+  azureTeamId: text("azure_team_id"),
+  azureTeamName: text("azure_team_name"),
+  status: text("status").notNull().default("ACTIVE"),
+  lastValidatedAt: text("last_validated_at"),
+  lastValidationStatus: text("last_validation_status").notNull().default("NOT_VALIDATED"),
+  recordStatus: text("record_status").notNull().default("ACTIVE"),
+  version: integer("version").notNull().default(1),
+  ...auditColumns,
+}, (table) => [
+  uniqueIndex("uq_azure_project_links_internal_project").on(table.projectId),
+  uniqueIndex("uq_azure_project_links_external_scope").on(table.connectionId, table.azureProjectId, table.azureTeamId),
+  index("idx_azure_project_links_connection").on(table.connectionId, table.recordStatus),
+]);

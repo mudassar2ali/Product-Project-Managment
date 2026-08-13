@@ -29,6 +29,13 @@
       "when": 1786627331635,
       "tag": "0003_red_prowler",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1786628934442,
+      "tag": "0004_lazy_power_man",
+      "breakpoints": true
     }
   ]
 }
