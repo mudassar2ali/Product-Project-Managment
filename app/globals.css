@@ -50,7 +50,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(13, 107, 77, .28
 .icon-button:hover { background: #f0f4f1; }
 .notification i { position: absolute; right: 5px; top: 5px; width: 6px; height: 6px; border-radius: 50%; background: #b9913c; border: 1px solid white; }
 .avatar { width: 32px; height: 32px; margin-left: 5px; border-radius: 50%; display: grid; place-items: center; background: #174b37; color: white; font-weight: 740; font-size: 10px; }
-.user-label strong,.user-label span { display: block; }.user-label strong { font-size: 11px; }.user-label span { font-size: 9px; margin-top: 2px; color: #809087; }
+.user-label strong,.user-label span,.user-label a { display: block; }.user-label strong { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }.user-label span,.user-label a { width: fit-content; font-size: 9px; margin-top: 2px; color: #708078; text-decoration: none; }.user-label a:hover { color: var(--brand); text-decoration: underline; }
 .mobile-menu { display: none; }
 
 .content { max-width: 1360px; margin: 0 auto; padding: 39px 42px 50px; outline: none; }

@@ -1,11 +1,18 @@
 import type { Metadata } from "next";
 import { CommandCenterShell } from "./command-center-shell";
+import { requireChatGPTUser } from "./chatgpt-auth";
+import { createPrincipal, requirePermission } from "./authorization";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Command Center | Product Development",
+  title: "Command Center",
   description: "Enterprise product and project portfolio command center.",
 };
 
-export default function Home() {
-  return <CommandCenterShell />;
+export default async function Home() {
+  const user = await requireChatGPTUser("/");
+  const principal = createPrincipal(user);
+  requirePermission(principal, "dashboard.view");
+  return <CommandCenterShell principal={principal} />;
 }

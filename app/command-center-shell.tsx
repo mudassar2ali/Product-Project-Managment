@@ -1,29 +1,44 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { ChatGPTUser } from "./chatgpt-auth";
+import type { PermissionCode, Principal } from "./authorization";
 
 type NavItem = {
   label: string;
   icon: string;
   step: number;
+  permission: PermissionCode;
 };
 
 const navigation: NavItem[] = [
-  { label: "Dashboard", icon: "⌂", step: 15 },
-  { label: "Products", icon: "◫", step: 5 },
-  { label: "Projects", icon: "◇", step: 6 },
-  { label: "Ideas", icon: "✦", step: 14 },
-  { label: "RAID", icon: "△", step: 13 },
-  { label: "Reports", icon: "▥", step: 16 },
-  { label: "Integrations", icon: "↔", step: 8 },
-  { label: "Administration", icon: "⚙", step: 3 },
+  { label: "Dashboard", icon: "⌂", step: 15, permission: "dashboard.view" },
+  { label: "Products", icon: "◫", step: 5, permission: "product.view" },
+  { label: "Projects", icon: "◇", step: 6, permission: "project.view" },
+  { label: "Ideas", icon: "✦", step: 14, permission: "idea.view" },
+  { label: "RAID", icon: "△", step: 13, permission: "raid.view" },
+  { label: "Reports", icon: "▥", step: 16, permission: "report.view" },
+  { label: "Integrations", icon: "↔", step: 8, permission: "integration.view" },
+  { label: "Administration", icon: "⚙", step: 3, permission: "admin.users" },
 ];
 
-export function CommandCenterShell() {
+function initials(user: ChatGPTUser) {
+  const source = user.fullName ?? user.email.split("@")[0];
+  return source
+    .split(/[\s._-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "U";
+}
+
+export function CommandCenterShell({ principal }: { principal: Principal }) {
+  const { user } = principal;
+  const allowedNavigation = navigation.filter((item) => principal.permissions.includes(item.permission));
   const [active, setActive] = useState("Dashboard");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [notice, setNotice] = useState(false);
-  const current = navigation.find((item) => item.label === active)!;
+  const current = allowedNavigation.find((item) => item.label === active) ?? allowedNavigation[0];
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -62,7 +77,7 @@ export function CommandCenterShell() {
 
         <div className="workspace-label">WORKSPACE</div>
         <nav className="nav-list">
-          {navigation.map((item) => (
+          {allowedNavigation.map((item) => (
             <button
               key={item.label}
               className={active === item.label ? "nav-item active" : "nav-item"}
@@ -97,8 +112,12 @@ export function CommandCenterShell() {
           <div className="top-actions">
             <button className="icon-button" aria-label="Search" onClick={() => setNotice(true)}>⌕</button>
             <button className="icon-button notification" aria-label="Notifications" onClick={() => setNotice(true)}>♢<i /></button>
-            <div className="avatar" aria-hidden="true">MA</div>
-            <div className="user-label"><strong>Workspace user</strong><span>Administrator</span></div>
+            <div className="avatar" aria-hidden="true">{initials(user)}</div>
+            <div className="user-label">
+              <strong>{user.displayName}</strong>
+              <span>{principal.roleNames.join(", ")}</span>
+              <a href="/signout-with-chatgpt?return_to=%2F">Sign out</a>
+            </div>
           </div>
         </header>
 
@@ -119,7 +138,7 @@ export function CommandCenterShell() {
                 : `${active} is included in the approved Stage 1 delivery sequence.`}
               </p>
             </div>
-            <div className="step-chip">Implementation step {current.step}</div>
+            <div className="step-chip">Implementation step {current?.step ?? 1}</div>
           </section>
 
           <section className="foundation-panel" aria-labelledby="foundation-title">
