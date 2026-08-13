@@ -35,10 +35,10 @@ test("server-renders the Stage 1 application shell", async () => {
   assert.match(html, /Product Development/);
   assert.match(html, /Command Center/);
   assert.match(html, /Primary navigation/);
-  assert.match(html, /Application Shell/);
+  assert.match(html, /Loading portfolio evidence/);
   assert.match(html, /Alex Morgan/);
   assert.match(html, /Sign out/);
-  assert.match(html, /no fabricated portfolio statistics/i);
+  assert.match(html, /single operational view of products, projects, delivery health/i);
   assert.match(html, /Skip to content/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
 });

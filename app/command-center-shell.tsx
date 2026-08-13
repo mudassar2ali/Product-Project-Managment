@@ -10,6 +10,7 @@ import { AzureSyncPanel } from "./integrations/azure-sync-panel";
 import { MilestoneCenter } from "./milestones/milestone-center";
 import { RaidCenter } from "./raid/raid-center";
 import { IdeaCenter } from "./ideas/idea-center";
+import { ExecutiveDashboard } from "./dashboard/executive-dashboard";
 
 type NavItem = {
   label: string;
@@ -149,7 +150,9 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
             <div className="step-chip">Implementation step {current?.step ?? 1}</div>
           </section>
 
-          {active === "Products" ? (
+          {active === "Dashboard" ? (
+            <ExecutiveDashboard navigate={select} />
+          ) : active === "Products" ? (
             <ProductPortfolio canCreate={principal.permissions.includes("product.create")} canEdit={principal.permissions.includes("product.edit")} />
           ) : active === "Projects" ? (
             <ProjectPortfolio canCreate={principal.permissions.includes("project.create")} canEdit={principal.permissions.includes("project.edit")} />
