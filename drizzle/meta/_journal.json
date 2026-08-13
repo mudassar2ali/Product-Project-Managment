@@ -57,6 +57,13 @@
       "when": 1786644046264,
       "tag": "0007_deep_moondragon",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1786644456263,
+      "tag": "0008_bent_selene",
+      "breakpoints": true
     }
   ]
 }

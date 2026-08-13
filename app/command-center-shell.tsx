@@ -8,6 +8,7 @@ import { ProjectPortfolio } from "./projects/project-portfolio";
 import { IntegrationCenter } from "./integrations/integration-center";
 import { AzureSyncPanel } from "./integrations/azure-sync-panel";
 import { MilestoneCenter } from "./milestones/milestone-center";
+import { RaidCenter } from "./raid/raid-center";
 
 type NavItem = {
   label: string;
@@ -153,6 +154,8 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
             <ProjectPortfolio canCreate={principal.permissions.includes("project.create")} canEdit={principal.permissions.includes("project.edit")} />
           ) : active === "Milestones" ? (
             <MilestoneCenter canCreate={principal.permissions.includes("milestone.create")} canEdit={principal.permissions.includes("milestone.edit")} canArchive={principal.permissions.includes("milestone.archive")} />
+          ) : active === "RAID" ? (
+            <RaidCenter canCreate={principal.permissions.includes("raid.create")} canEscalate={principal.permissions.includes("raid.escalate")} />
           ) : active === "Integrations" ? (
             <><IntegrationCenter canConfigure={principal.permissions.includes("integration.configure")} /><AzureSyncPanel canSync={principal.permissions.includes("integration.sync")} /></>
           ) : <><section className="foundation-panel" aria-labelledby="foundation-title">
