@@ -182,6 +182,10 @@ export const projectStageWeights = sqliteTable("project_stage_weights", {
   index("idx_project_stage_weights_project").on(table.projectId),
 ]);
 
+export const milestones = sqliteTable("milestones", {
+  id: text("id").primaryKey(), businessId: text("business_id").notNull(), projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }), name: text("name").notNull(), description: text("description").notNull().default(""), type: text("type").notNull().default("Delivery"), plannedDate: text("planned_date").notNull(), actualDate: text("actual_date"), status: text("status").notNull().default("Planned"), owner: text("owner").notNull().default(""), notes: text("notes").notNull().default(""), recordStatus: text("record_status").notNull().default("ACTIVE"), archivedAt: text("archived_at"), version: integer("version").notNull().default(1), ...auditColumns,
+}, (table) => [uniqueIndex("uq_milestones_business_id").on(table.businessId),index("idx_milestones_project_date").on(table.projectId, table.plannedDate),index("idx_milestones_status_date").on(table.status, table.plannedDate),index("idx_milestones_record_status").on(table.recordStatus)]);
+
 export const azureConnections = sqliteTable("azure_connections", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),

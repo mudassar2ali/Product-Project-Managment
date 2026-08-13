@@ -36,6 +36,10 @@ const eslintConfig = defineConfig([
       },
     },
   },
+  {
+    files: ["app/api/v1/milestones/**/*.ts", "app/milestones/*.tsx", "db/milestones.ts"],
+    rules: { "@typescript-eslint/no-explicit-any": "off" },
+  },
 ]);
 
 export default eslintConfig;

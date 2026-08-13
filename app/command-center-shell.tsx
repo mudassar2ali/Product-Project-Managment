@@ -7,6 +7,7 @@ import { ProductPortfolio } from "./products/product-portfolio";
 import { ProjectPortfolio } from "./projects/project-portfolio";
 import { IntegrationCenter } from "./integrations/integration-center";
 import { AzureSyncPanel } from "./integrations/azure-sync-panel";
+import { MilestoneCenter } from "./milestones/milestone-center";
 
 type NavItem = {
   label: string;
@@ -19,6 +20,7 @@ const navigation: NavItem[] = [
   { label: "Dashboard", icon: "⌂", step: 15, permission: "dashboard.view" },
   { label: "Products", icon: "◫", step: 5, permission: "product.view" },
   { label: "Projects", icon: "◇", step: 6, permission: "project.view" },
+  { label: "Milestones", icon: "◆", step: 12, permission: "milestone.view" },
   { label: "Ideas", icon: "✦", step: 14, permission: "idea.view" },
   { label: "RAID", icon: "△", step: 13, permission: "raid.view" },
   { label: "Reports", icon: "▥", step: 16, permission: "report.view" },
@@ -149,6 +151,8 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
             <ProductPortfolio canCreate={principal.permissions.includes("product.create")} canEdit={principal.permissions.includes("product.edit")} />
           ) : active === "Projects" ? (
             <ProjectPortfolio canCreate={principal.permissions.includes("project.create")} canEdit={principal.permissions.includes("project.edit")} />
+          ) : active === "Milestones" ? (
+            <MilestoneCenter canCreate={principal.permissions.includes("milestone.create")} canEdit={principal.permissions.includes("milestone.edit")} canArchive={principal.permissions.includes("milestone.archive")} />
           ) : active === "Integrations" ? (
             <><IntegrationCenter canConfigure={principal.permissions.includes("integration.configure")} /><AzureSyncPanel canSync={principal.permissions.includes("integration.sync")} /></>
           ) : <><section className="foundation-panel" aria-labelledby="foundation-title">

@@ -45,10 +45,11 @@ export async function getProject(id: string) {
 export async function getProjectOverview(id: string) {
   const project = await getProject(id);
   if (!project) return null;
-  const [activity,deliveryLink,sprint] = await Promise.all([
+  const [activity,deliveryLink,sprint,milestoneRows] = await Promise.all([
     env.DB.prepare(`SELECT action, source, correlation_id AS correlationId, occurred_at AS occurredAt FROM audit_logs WHERE entity_type='Project' AND entity_id=? ORDER BY occurred_at DESC LIMIT 12`).bind(id).all<{ action: string; source: string; correlationId: string; occurredAt: string }>(),
     env.DB.prepare(`SELECT c.name AS connectionName,c.organization,l.azure_project_name AS azureProjectName,l.azure_team_name AS azureTeamName,l.last_validated_at AS lastValidatedAt,l.last_validation_status AS validationStatus,(SELECT progress FROM azure_delivery_snapshots WHERE link_id=l.id ORDER BY calculated_at DESC LIMIT 1) AS syncedProgress,(SELECT total_items FROM azure_delivery_snapshots WHERE link_id=l.id ORDER BY calculated_at DESC LIMIT 1) AS totalItems,(SELECT completed_items FROM azure_delivery_snapshots WHERE link_id=l.id ORDER BY calculated_at DESC LIMIT 1) AS completedItems FROM azure_project_links l JOIN azure_connections c ON c.id=l.connection_id WHERE l.project_id=? AND l.record_status='ACTIVE' AND c.record_status='ACTIVE'`).bind(id).first<{connectionName:string;organization:string;azureProjectName:string;azureTeamName:string|null;lastValidatedAt:string|null;validationStatus:string;syncedProgress:number|null;totalItems:number|null;completedItems:number|null}>(),
     env.DB.prepare(`SELECT s.iteration_name AS name,s.path,s.start_date AS startDate,s.finish_date AS finishDate,s.total_items AS totalItems,s.completed_items AS completedItems,s.active_items AS activeItems,s.progress,s.days_remaining AS daysRemaining,s.health,s.calculated_at AS calculatedAt FROM azure_project_links l JOIN azure_sprint_snapshots s ON s.link_id=l.id WHERE l.project_id=? AND l.record_status='ACTIVE' ORDER BY s.calculated_at DESC LIMIT 1`).bind(id).first(),
+    env.DB.prepare(`SELECT id,business_id AS businessId,name,type,planned_date AS plannedDate,actual_date AS actualDate,status,CASE WHEN status NOT IN ('Completed','Cancelled') AND date(planned_date)<date('now') THEN 1 ELSE 0 END AS overdue FROM milestones WHERE project_id=? AND record_status='ACTIVE' ORDER BY planned_date LIMIT 12`).bind(id).all(),
   ]);
   return {
     project,
@@ -62,7 +63,7 @@ export async function getProjectOverview(id: string) {
     delivery: deliveryLink ? { connected:true,provider:"Azure DevOps",...deliveryLink,lastSync:deliveryLink.lastValidatedAt } : { connected:false,provider:null,lastSync:null },
     sprint: sprint ?? null,
     relatedModules: {
-      milestones: { available: false, reason: "Milestone Management is delivered in Step 12." },
+      milestones: { available: true, items: milestoneRows.results },
       raid: { available: false, reason: "RAID Management is delivered in Step 13." },
     },
     activity: activity.results,

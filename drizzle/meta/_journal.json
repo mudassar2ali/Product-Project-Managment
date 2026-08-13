@@ -50,6 +50,13 @@
       "when": 1786636285506,
       "tag": "0006_steady_arachne",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1786644046264,
+      "tag": "0007_deep_moondragon",
+      "breakpoints": true
     }
   ]
 }
