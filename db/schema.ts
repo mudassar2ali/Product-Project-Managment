@@ -224,3 +224,11 @@ export const azureProjectLinks = sqliteTable("azure_project_links", {
   uniqueIndex("uq_azure_project_links_external_scope").on(table.connectionId, table.azureProjectId, table.azureTeamId),
   index("idx_azure_project_links_connection").on(table.connectionId, table.recordStatus),
 ]);
+
+export const azureSyncRuns = sqliteTable("azure_sync_runs", {
+  id: text("id").primaryKey(), linkId: text("link_id").notNull().references(() => azureProjectLinks.id, { onDelete: "cascade" }), status: text("status").notNull(), trigger: text("trigger").notNull().default("MANUAL"), startedAt: text("started_at").notNull(), completedAt: text("completed_at"), itemsSeen: integer("items_seen").notNull().default(0), itemsCompleted: integer("items_completed").notNull().default(0), progress: integer("progress"), errorCode: text("error_code"), errorMessage: text("error_message"), correlationId: text("correlation_id").notNull(), ...auditColumns,
+}, (table) => [index("idx_azure_sync_runs_link_time").on(table.linkId, table.startedAt),index("idx_azure_sync_runs_status").on(table.status, table.startedAt)]);
+
+export const azureDeliverySnapshots = sqliteTable("azure_delivery_snapshots", {
+  id: text("id").primaryKey(), linkId: text("link_id").notNull().references(() => azureProjectLinks.id, { onDelete: "cascade" }), syncRunId: text("sync_run_id").notNull().references(() => azureSyncRuns.id, { onDelete: "cascade" }), sourceRevision: text("source_revision").notNull(), totalItems: integer("total_items").notNull(), completedItems: integer("completed_items").notNull(), activeItems: integer("active_items").notNull(), otherItems: integer("other_items").notNull(), progress: integer("progress").notNull(), calculatedAt: text("calculated_at").notNull(), ...auditColumns,
+}, (table) => [uniqueIndex("uq_azure_delivery_snapshots_revision").on(table.linkId, table.sourceRevision),index("idx_azure_delivery_snapshots_link_time").on(table.linkId, table.calculatedAt)]);

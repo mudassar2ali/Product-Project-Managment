@@ -6,6 +6,7 @@ import type { PermissionCode, Principal } from "./authorization";
 import { ProductPortfolio } from "./products/product-portfolio";
 import { ProjectPortfolio } from "./projects/project-portfolio";
 import { IntegrationCenter } from "./integrations/integration-center";
+import { AzureSyncPanel } from "./integrations/azure-sync-panel";
 
 type NavItem = {
   label: string;
@@ -149,7 +150,7 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
           ) : active === "Projects" ? (
             <ProjectPortfolio canCreate={principal.permissions.includes("project.create")} canEdit={principal.permissions.includes("project.edit")} />
           ) : active === "Integrations" ? (
-            <IntegrationCenter canConfigure={principal.permissions.includes("integration.configure")} />
+            <><IntegrationCenter canConfigure={principal.permissions.includes("integration.configure")} /><AzureSyncPanel canSync={principal.permissions.includes("integration.sync")} /></>
           ) : <><section className="foundation-panel" aria-labelledby="foundation-title">
             <div className="foundation-copy">
               <div className="foundation-icon" aria-hidden="true">⌁</div>

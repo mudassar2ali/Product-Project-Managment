@@ -47,7 +47,7 @@ export async function getProjectOverview(id: string) {
   if (!project) return null;
   const [activity,deliveryLink] = await Promise.all([
     env.DB.prepare(`SELECT action, source, correlation_id AS correlationId, occurred_at AS occurredAt FROM audit_logs WHERE entity_type='Project' AND entity_id=? ORDER BY occurred_at DESC LIMIT 12`).bind(id).all<{ action: string; source: string; correlationId: string; occurredAt: string }>(),
-    env.DB.prepare(`SELECT c.name AS connectionName,c.organization,l.azure_project_name AS azureProjectName,l.azure_team_name AS azureTeamName,l.last_validated_at AS lastValidatedAt,l.last_validation_status AS validationStatus FROM azure_project_links l JOIN azure_connections c ON c.id=l.connection_id WHERE l.project_id=? AND l.record_status='ACTIVE' AND c.record_status='ACTIVE'`).bind(id).first<{connectionName:string;organization:string;azureProjectName:string;azureTeamName:string|null;lastValidatedAt:string|null;validationStatus:string}>(),
+    env.DB.prepare(`SELECT c.name AS connectionName,c.organization,l.azure_project_name AS azureProjectName,l.azure_team_name AS azureTeamName,l.last_validated_at AS lastValidatedAt,l.last_validation_status AS validationStatus,(SELECT progress FROM azure_delivery_snapshots WHERE link_id=l.id ORDER BY calculated_at DESC LIMIT 1) AS syncedProgress,(SELECT total_items FROM azure_delivery_snapshots WHERE link_id=l.id ORDER BY calculated_at DESC LIMIT 1) AS totalItems,(SELECT completed_items FROM azure_delivery_snapshots WHERE link_id=l.id ORDER BY calculated_at DESC LIMIT 1) AS completedItems FROM azure_project_links l JOIN azure_connections c ON c.id=l.connection_id WHERE l.project_id=? AND l.record_status='ACTIVE' AND c.record_status='ACTIVE'`).bind(id).first<{connectionName:string;organization:string;azureProjectName:string;azureTeamName:string|null;lastValidatedAt:string|null;validationStatus:string;syncedProgress:number|null;totalItems:number|null;completedItems:number|null}>(),
   ]);
   return {
     project,
@@ -58,7 +58,7 @@ export async function getProjectOverview(id: string) {
       weightedContribution: Math.round(project[`${stage}Progress`] * project.weights[stage] * 100) / 10000,
       source: stage === "development" ? "Manual — no engineering provider linked" : "Project record",
     })),
-    delivery: deliveryLink ? { connected:true,provider:"Azure DevOps",connectionName:deliveryLink.connectionName,organization:deliveryLink.organization,azureProjectName:deliveryLink.azureProjectName,azureTeamName:deliveryLink.azureTeamName,lastValidatedAt:deliveryLink.lastValidatedAt,validationStatus:deliveryLink.validationStatus,lastSync:null } : { connected:false,provider:null,lastSync:null },
+    delivery: deliveryLink ? { connected:true,provider:"Azure DevOps",...deliveryLink,lastSync:deliveryLink.lastValidatedAt } : { connected:false,provider:null,lastSync:null },
     relatedModules: {
       milestones: { available: false, reason: "Milestone Management is delivered in Step 12." },
       raid: { available: false, reason: "RAID Management is delivered in Step 13." },
