@@ -5,6 +5,7 @@ import type { ChatGPTUser } from "./chatgpt-auth";
 import type { PermissionCode, Principal } from "./authorization";
 import { ProductPortfolio } from "./products/product-portfolio";
 import { ProjectPortfolio } from "./projects/project-portfolio";
+import { IntegrationCenter } from "./integrations/integration-center";
 
 type NavItem = {
   label: string;
@@ -147,6 +148,8 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
             <ProductPortfolio canCreate={principal.permissions.includes("product.create")} canEdit={principal.permissions.includes("product.edit")} />
           ) : active === "Projects" ? (
             <ProjectPortfolio canCreate={principal.permissions.includes("project.create")} canEdit={principal.permissions.includes("project.edit")} />
+          ) : active === "Integrations" ? (
+            <IntegrationCenter canConfigure={principal.permissions.includes("integration.configure")} />
           ) : <><section className="foundation-panel" aria-labelledby="foundation-title">
             <div className="foundation-copy">
               <div className="foundation-icon" aria-hidden="true">⌁</div>

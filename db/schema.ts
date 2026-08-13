@@ -181,3 +181,26 @@ export const projectStageWeights = sqliteTable("project_stage_weights", {
   uniqueIndex("uq_project_stage_weight").on(table.projectId, table.stage),
   index("idx_project_stage_weights_project").on(table.projectId),
 ]);
+
+export const azureConnections = sqliteTable("azure_connections", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  organization: text("organization").notNull(),
+  organizationUrl: text("organization_url").notNull(),
+  authType: text("auth_type").notNull().default("ENTRA_APPLICATION"),
+  credentialBinding: text("credential_binding").notNull(),
+  status: text("status").notNull().default("NOT_TESTED"),
+  syncFrequency: text("sync_frequency").notNull().default("HOURLY"),
+  lastTestedAt: text("last_tested_at"),
+  lastSuccessfulAt: text("last_successful_at"),
+  lastErrorCode: text("last_error_code"),
+  lastErrorMessage: text("last_error_message"),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  recordStatus: text("record_status").notNull().default("ACTIVE"),
+  version: integer("version").notNull().default(1),
+  ...auditColumns,
+}, (table) => [
+  uniqueIndex("uq_azure_connections_organization").on(table.organization),
+  index("idx_azure_connections_status").on(table.status, table.enabled),
+  index("idx_azure_connections_record_status").on(table.recordStatus),
+]);
