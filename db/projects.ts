@@ -42,6 +42,33 @@ export async function getProject(id: string) {
   return record ? (await attachWeights([record]))[0] : null;
 }
 
+export async function getProjectOverview(id: string) {
+  const project = await getProject(id);
+  if (!project) return null;
+  const activity = await env.DB.prepare(`
+    SELECT action, source, correlation_id AS correlationId, occurred_at AS occurredAt
+    FROM audit_logs WHERE entity_type='Project' AND entity_id=?
+    ORDER BY occurred_at DESC LIMIT 12
+  `).bind(id).all<{ action: string; source: string; correlationId: string; occurredAt: string }>();
+  return {
+    project,
+    stageProgress: stageKeys.map((stage) => ({
+      stage,
+      completion: project[`${stage}Progress`],
+      weight: project.weights[stage],
+      weightedContribution: Math.round(project[`${stage}Progress`] * project.weights[stage] * 100) / 10000,
+      source: stage === "development" ? "Manual — no engineering provider linked" : "Project record",
+    })),
+    delivery: { connected: false, provider: null, lastSync: null },
+    relatedModules: {
+      milestones: { available: false, reason: "Milestone Management is delivered in Step 12." },
+      raid: { available: false, reason: "RAID Management is delivered in Step 13." },
+    },
+    activity: activity.results,
+    calculatedAt: project.updatedAt,
+  };
+}
+
 async function nextBusinessId() {
   const result = await env.DB.prepare(`INSERT INTO business_sequences (entity_type,next_value,updated_at) VALUES ('PROJECT',2,CURRENT_TIMESTAMP) ON CONFLICT(entity_type) DO UPDATE SET next_value=next_value+1,updated_at=CURRENT_TIMESTAMP RETURNING next_value-1 AS value`).first<{value:number}>();
   return `PROJ-${String(result?.value ?? 1).padStart(4,"0")}`;
