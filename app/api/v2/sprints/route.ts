@@ -6,7 +6,7 @@ export async function GET(request: Request) {
   const context = await authorizeApi("sprint.view"); if (isResponse(context)) return context;
   const url = new URL(request.url), page = Math.max(1, Number(url.searchParams.get("page") || 1)), pageSize = Math.min(100, Math.max(1, Number(url.searchParams.get("pageSize") || 50)));
   const { listSprints } = await import("../../../../db/sprints");
-  const result = await listSprints({ projectId: url.searchParams.get("projectId") || "", status: url.searchParams.get("status") || "", page, pageSize });
+  const result = await listSprints({ projectId: url.searchParams.get("projectId") || "", status: url.searchParams.get("status") || "", origin: url.searchParams.get("origin") || "", page, pageSize });
   return Response.json({ data: result.items, meta: { page, pageSize, total: result.total, correlationId: context.correlationId, timestamp: context.timestamp } }, { headers: { "cache-control": "no-store" } });
 }
 

@@ -5,10 +5,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const context = await authorizeApi("backlog.view");
   if (isResponse(context)) return context;
   const { id } = await params;
-  const { getBacklog } = await import("../../../../../db/backlog");
-  const item = await getBacklog(id);
-  if (!item) return apiError(404, "BACKLOG_ITEM_NOT_FOUND", "Backlog item was not found.", context.correlationId, context.timestamp);
-  return Response.json({ data: item }, { headers: { "cache-control": "no-store" } });
+  const { getBacklogWorkspace } = await import("../../../../../db/backlog");
+  const result = await getBacklogWorkspace(id);
+  if (result.kind === "not_found") return apiError(404, "BACKLOG_ITEM_NOT_FOUND", "Backlog item was not found.", context.correlationId, context.timestamp);
+  return Response.json({ data: result }, { headers: { "cache-control": "no-store" } });
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {

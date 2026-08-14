@@ -3,10 +3,11 @@ import type { SprintInput } from "../app/delivery/sprint-contract";
 
 const sprintColumns = "s.id,s.business_id businessId,s.project_id projectId,p.name projectName,p.code projectCode,s.name,s.goal,s.origin,s.external_id externalId,s.external_path externalPath,s.source_revision sourceRevision,s.synced_at syncedAt,s.start_date startDate,s.end_date endDate,s.status,s.capacity_hours capacityHours,s.committed_points committedPoints,s.version,s.updated_at updatedAt";
 
-export async function listSprints(input: { projectId: string; status: string; page: number; pageSize: number }) {
+export async function listSprints(input: { projectId: string; status: string; origin: string; page: number; pageSize: number }) {
   const where = ["s.record_status='ACTIVE'"]; const values: unknown[] = [];
   if (input.projectId) { where.push("s.project_id=?"); values.push(input.projectId); }
   if (input.status) { where.push("s.status=?"); values.push(input.status); }
+  if (input.origin) { where.push("s.origin=?"); values.push(input.origin); }
   const clause = where.join(" AND ");
   const [rows, count] = await Promise.all([
     env.DB.prepare(`SELECT ${sprintColumns},CASE WHEN s.origin='AZURE_DEVOPS' THEN COALESCE((SELECT planned_items FROM sprint_metric_snapshots metric WHERE metric.sprint_id=s.id ORDER BY metric.calculated_at DESC,metric.id DESC LIMIT 1),0) ELSE COUNT(m.id) END itemCount,CASE WHEN s.origin='AZURE_DEVOPS' THEN 0 ELSE COALESCE(SUM(m.planned_hours),0) END plannedHours,(SELECT progress FROM sprint_metric_snapshots metric WHERE metric.sprint_id=s.id ORDER BY metric.calculated_at DESC,metric.id DESC LIMIT 1) metricProgress,(SELECT health FROM sprint_metric_snapshots metric WHERE metric.sprint_id=s.id ORDER BY metric.calculated_at DESC,metric.id DESC LIMIT 1) metricHealth,(SELECT open_bug_count FROM sprint_metric_snapshots metric WHERE metric.sprint_id=s.id ORDER BY metric.calculated_at DESC,metric.id DESC LIMIT 1) openBugCount,(SELECT blocker_count FROM sprint_metric_snapshots metric WHERE metric.sprint_id=s.id ORDER BY metric.calculated_at DESC,metric.id DESC LIMIT 1) blockerCount FROM sprints s JOIN projects p ON p.id=s.project_id LEFT JOIN sprint_memberships m ON m.sprint_id=s.id AND m.removed_at IS NULL WHERE ${clause} GROUP BY s.id ORDER BY s.start_date DESC,s.business_id DESC LIMIT ? OFFSET ?`).bind(...values, input.pageSize, (input.page - 1) * input.pageSize).all(),
