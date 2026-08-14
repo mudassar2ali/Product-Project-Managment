@@ -16,6 +16,7 @@ import { AuditCenter } from "./audit/audit-center";
 import { BacklogCenter } from "./delivery/backlog-center";
 import { StoryCriteriaCenter } from "./delivery/story-criteria-center";
 import { DependencyCenter } from "./delivery/dependency-center";
+import { SprintCenter } from "./delivery/sprint-center";
 
 type NavItem = {
   label: string;
@@ -29,6 +30,7 @@ const navigation: NavItem[] = [
   { label: "Products", icon: "◫", step: 5, permission: "product.view" },
   { label: "Projects", icon: "◇", step: 6, permission: "project.view" },
   { label: "Backlog", icon: "☷", step: 3, permission: "backlog.view" },
+  { label: "Sprints", icon: "◷", step: 6, permission: "sprint.view" },
   { label: "Milestones", icon: "◆", step: 12, permission: "milestone.view" },
   { label: "Ideas", icon: "✦", step: 14, permission: "idea.view" },
   { label: "RAID", icon: "△", step: 13, permission: "raid.view" },
@@ -147,17 +149,18 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
 
           <section className="page-intro">
             <div>
-              <div className="eyebrow">{active === "Backlog" ? "STAGE 2 · AGILE DELIVERY" : "STAGE 1 · CORE MANAGEMENT MVP"}</div>
+              <div className="eyebrow">{active === "Backlog" || active === "Sprints" ? "STAGE 2 · AGILE DELIVERY" : "STAGE 1 · CORE MANAGEMENT MVP"}</div>
               <h1>{active}</h1>
               <p>{active === "Dashboard"
                 ? "A single operational view of products, projects, delivery health and management attention."
                 : active === "Reports" ? "Controlled portfolio reports generated directly from persisted management evidence."
                 : active === "Audit Trail" ? "Read-only evidence of governed changes, actors, sources and correlation identifiers."
                 : active === "Backlog" ? "A governed Epic-to-Bug hierarchy for local planning and source-labelled delivery evidence."
+                : active === "Sprints" ? "Plan local delivery commitments with explicit goals, dates, capacity, ordering and dependency evidence."
                 : `${active} is included in the approved Stage 1 delivery sequence.`}
               </p>
             </div>
-            <div className="step-chip">{active === "Backlog" ? "Stage 2 · Step 5" : `Implementation step ${current?.step ?? 1}`}</div>
+            <div className="step-chip">{active === "Backlog" ? "Stage 2 · Step 5" : active === "Sprints" ? "Stage 2 · Step 6" : `Implementation step ${current?.step ?? 1}`}</div>
           </section>
 
           {active === "Dashboard" ? (
@@ -168,6 +171,8 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
             <ProjectPortfolio canCreate={principal.permissions.includes("project.create")} canEdit={principal.permissions.includes("project.edit")} />
           ) : active === "Backlog" ? (
             <><BacklogCenter canCreate={principal.permissions.includes("backlog.create")} canEdit={principal.permissions.includes("backlog.edit")} canArchive={principal.permissions.includes("backlog.archive")} /><StoryCriteriaCenter canEdit={principal.permissions.includes("backlog.edit")} /><DependencyCenter canEdit={principal.permissions.includes("backlog.edit")} /></>
+          ) : active === "Sprints" ? (
+            <SprintCenter canCreate={principal.permissions.includes("sprint.create")} canPlan={principal.permissions.includes("sprint.plan")} />
           ) : active === "Milestones" ? (
             <MilestoneCenter canCreate={principal.permissions.includes("milestone.create")} canEdit={principal.permissions.includes("milestone.edit")} canArchive={principal.permissions.includes("milestone.archive")} />
           ) : active === "RAID" ? (
