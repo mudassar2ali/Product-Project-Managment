@@ -149,7 +149,7 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
 
           <section className="page-intro">
             <div>
-              <div className="eyebrow">{active === "Backlog" || active === "Sprints" ? "STAGE 2 · AGILE DELIVERY" : "STAGE 1 · CORE MANAGEMENT MVP"}</div>
+              <div className="eyebrow">{active === "Backlog" || active === "Sprints" || active === "Integrations" ? "STAGE 2 · AGILE DELIVERY" : "STAGE 1 · CORE MANAGEMENT MVP"}</div>
               <h1>{active}</h1>
               <p>{active === "Dashboard"
                 ? "A single operational view of products, projects, delivery health and management attention."
@@ -157,10 +157,11 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
                 : active === "Audit Trail" ? "Read-only evidence of governed changes, actors, sources and correlation identifiers."
                 : active === "Backlog" ? "A governed Epic-to-Bug hierarchy for local planning and source-labelled delivery evidence."
                 : active === "Sprints" ? "Plan local delivery commitments with explicit goals, dates, capacity, ordering and dependency evidence."
+                : active === "Integrations" ? "Normalize read-only Azure DevOps work-item evidence through governed Project, Team, type and state mappings."
                 : `${active} is included in the approved Stage 1 delivery sequence.`}
               </p>
             </div>
-            <div className="step-chip">{active === "Backlog" ? "Stage 2 · Step 5" : active === "Sprints" ? "Stage 2 · Step 7" : `Implementation step ${current?.step ?? 1}`}</div>
+            <div className="step-chip">{active === "Backlog" ? "Stage 2 · Step 5" : active === "Sprints" ? "Stage 2 · Step 7" : active === "Integrations" ? "Stage 2 · Step 8" : `Implementation step ${current?.step ?? 1}`}</div>
           </section>
 
           {active === "Dashboard" ? (
