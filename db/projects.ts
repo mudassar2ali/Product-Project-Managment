@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { calculateOverallProgress, stageKeys, type ProjectInput } from "../app/projects/project-contract";
+import { getProjectDeliveryInsights, type DeliveryInsightAccess } from "./stage2-insights";
 
 export type ProjectRecord = Omit<ProjectInput, "weights"> & {
   id: string; businessId: string; productName: string; productCode: string; overallProgress: number;
@@ -42,14 +43,18 @@ export async function getProject(id: string) {
   return record ? (await attachWeights([record]))[0] : null;
 }
 
-export async function getProjectOverview(id: string) {
+export async function getProjectOverview(id: string, access: DeliveryInsightAccess = { backlog: true, sprints: true, metrics: true }) {
   const project = await getProject(id);
   if (!project) return null;
-  const [activity,deliveryLink,sprint,milestoneRows] = await Promise.all([
+  const [activity,deliveryLink,sprint,milestoneRows,raidSummary,deliveryInsights] = await Promise.all([
     env.DB.prepare(`SELECT action, source, correlation_id AS correlationId, occurred_at AS occurredAt FROM audit_logs WHERE entity_type='Project' AND entity_id=? ORDER BY occurred_at DESC LIMIT 12`).bind(id).all<{ action: string; source: string; correlationId: string; occurredAt: string }>(),
-    env.DB.prepare(`SELECT c.name AS connectionName,c.organization,l.azure_project_name AS azureProjectName,l.azure_team_name AS azureTeamName,l.last_validated_at AS lastValidatedAt,l.last_validation_status AS validationStatus,(SELECT progress FROM azure_delivery_snapshots WHERE link_id=l.id ORDER BY calculated_at DESC LIMIT 1) AS syncedProgress,(SELECT total_items FROM azure_delivery_snapshots WHERE link_id=l.id ORDER BY calculated_at DESC LIMIT 1) AS totalItems,(SELECT completed_items FROM azure_delivery_snapshots WHERE link_id=l.id ORDER BY calculated_at DESC LIMIT 1) AS completedItems FROM azure_project_links l JOIN azure_connections c ON c.id=l.connection_id WHERE l.project_id=? AND l.record_status='ACTIVE' AND c.record_status='ACTIVE'`).bind(id).first<{connectionName:string;organization:string;azureProjectName:string;azureTeamName:string|null;lastValidatedAt:string|null;validationStatus:string;syncedProgress:number|null;totalItems:number|null;completedItems:number|null}>(),
-    env.DB.prepare(`SELECT s.iteration_name AS name,s.path,s.start_date AS startDate,s.finish_date AS finishDate,s.total_items AS totalItems,s.completed_items AS completedItems,s.active_items AS activeItems,s.progress,s.days_remaining AS daysRemaining,s.health,s.calculated_at AS calculatedAt FROM azure_project_links l JOIN azure_sprint_snapshots s ON s.link_id=l.id WHERE l.project_id=? AND l.record_status='ACTIVE' ORDER BY s.calculated_at DESC LIMIT 1`).bind(id).first(),
+    env.DB.prepare(`SELECT c.name AS connectionName,c.organization,l.azure_project_name AS azureProjectName,l.azure_team_name AS azureTeamName,l.last_validated_at AS lastValidatedAt,l.last_validation_status AS validationStatus FROM azure_project_links l JOIN azure_connections c ON c.id=l.connection_id WHERE l.project_id=? AND l.record_status='ACTIVE' AND c.record_status='ACTIVE'`).bind(id).first<{connectionName:string;organization:string;azureProjectName:string;azureTeamName:string|null;lastValidatedAt:string|null;validationStatus:string}>(),
+    access.sprints && access.metrics
+      ? env.DB.prepare(`SELECT s.iteration_name AS name,s.path,s.start_date AS startDate,s.finish_date AS finishDate,s.total_items AS totalItems,s.completed_items AS completedItems,s.active_items AS activeItems,s.progress,s.days_remaining AS daysRemaining,s.health,s.calculated_at AS calculatedAt FROM azure_project_links l JOIN azure_sprint_snapshots s ON s.link_id=l.id WHERE l.project_id=? AND l.record_status='ACTIVE' ORDER BY s.calculated_at DESC LIMIT 1`).bind(id).first()
+      : Promise.resolve(null),
     env.DB.prepare(`SELECT id,business_id AS businessId,name,type,planned_date AS plannedDate,actual_date AS actualDate,status,CASE WHEN status NOT IN ('Completed','Cancelled') AND date(planned_date)<date('now') THEN 1 ELSE 0 END AS overdue FROM milestones WHERE project_id=? AND record_status='ACTIVE' ORDER BY planned_date LIMIT 12`).bind(id).all(),
+    env.DB.prepare(`SELECT COUNT(*) total,COALESCE(SUM(CASE WHEN escalated=1 OR impact='Critical' OR (status NOT IN('Resolved','Closed') AND due_date IS NOT NULL AND date(due_date)<date('now')) THEN 1 ELSE 0 END),0) attention FROM raid_items WHERE project_id=? AND record_status='ACTIVE'`).bind(id).first<{ total: number; attention: number }>(),
+    getProjectDeliveryInsights(id, access),
   ]);
   return {
     project,
@@ -58,14 +63,15 @@ export async function getProjectOverview(id: string) {
       completion: project[`${stage}Progress`],
       weight: project.weights[stage],
       weightedContribution: Math.round(project[`${stage}Progress`] * project.weights[stage] * 100) / 10000,
-      source: stage === "development" ? "Manual — no engineering provider linked" : "Project record",
+      source: stage === "development" ? "Project record · governance input" : "Project record",
     })),
-    delivery: deliveryLink ? { connected:true,provider:"Azure DevOps",...deliveryLink,lastSync:deliveryLink.lastValidatedAt } : { connected:false,provider:null,lastSync:null },
+    delivery: deliveryLink ? { connected:true,provider:"Azure DevOps",...deliveryLink,lastSync:deliveryLink.lastValidatedAt } : { connected:false,provider:null,lastSync:null,source:"Manual — no engineering provider linked" },
     sprint: sprint ?? null,
     relatedModules: {
-      milestones: { available: true, items: milestoneRows.results },
-      raid: { available: false, reason: "RAID Management is delivered in Step 13." },
+      milestones: { available: true, reason: null, items: milestoneRows.results },
+      raid: { available: true, total: Number(raidSummary?.total ?? 0), attention: Number(raidSummary?.attention ?? 0) },
     },
+    deliveryInsights,
     activity: activity.results,
     calculatedAt: project.updatedAt,
   };

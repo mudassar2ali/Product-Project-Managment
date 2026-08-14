@@ -150,11 +150,12 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
 
           <section className="page-intro">
             <div>
-              <div className="eyebrow">{active === "Backlog" || active === "Sprints" || active === "Integrations" ? "STAGE 2 · AGILE DELIVERY" : "STAGE 1 · CORE MANAGEMENT MVP"}</div>
+              <div className="eyebrow">{["Dashboard", "Projects", "Reports", "Backlog", "Sprints", "Integrations"].includes(active) ? "STAGE 2 · AGILE DELIVERY" : "STAGE 1 · CORE MANAGEMENT MVP"}</div>
               <h1>{active}</h1>
               <p>{active === "Dashboard"
-                ? "A single operational view of products, projects, delivery health and management attention."
-                : active === "Reports" ? "Controlled portfolio reports generated directly from persisted management evidence."
+                ? "A single operational view of products, projects, delivery health and management attention, extended with source-labelled Backlog and Sprint evidence."
+                : active === "Projects" ? "Manage Project records and open a source-labelled Stage 2 delivery overview."
+                : active === "Reports" ? "Controlled core and Stage 2 delivery reports generated directly from persisted evidence."
                 : active === "Audit Trail" ? "Read-only evidence of governed changes, actors, sources and correlation identifiers."
                 : active === "Backlog" ? "Browse one source-labelled local and Azure hierarchy, then inspect delivery evidence without losing Project context."
                 : active === "Sprints" ? "Plan local commitments and inspect Azure delivery evidence with the same Project and source context as Backlog."
@@ -162,11 +163,11 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
                 : `${active} is included in the approved Stage 1 delivery sequence.`}
               </p>
             </div>
-            <div className="step-chip">{active === "Backlog" || active === "Sprints" ? "Stage 2 · Step 10" : active === "Integrations" ? "Stage 2 · Step 9" : `Implementation step ${current?.step ?? 1}`}</div>
+            <div className="step-chip">{active === "Dashboard" || active === "Projects" || active === "Reports" ? "Stage 2 · Step 11" : active === "Backlog" || active === "Sprints" ? "Stage 2 · Step 10" : active === "Integrations" ? "Stage 2 · Step 9" : `Implementation step ${current?.step ?? 1}`}</div>
           </section>
 
           {active === "Dashboard" ? (
-            <ExecutiveDashboard navigate={select} />
+            <ExecutiveDashboard navigate={select} availableModules={allowedNavigation.map((item) => item.label)} />
           ) : active === "Products" ? (
             <ProductPortfolio canCreate={principal.permissions.includes("product.create")} canEdit={principal.permissions.includes("product.edit")} />
           ) : active === "Projects" ? (

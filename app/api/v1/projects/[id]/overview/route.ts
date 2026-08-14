@@ -6,7 +6,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (isResponse(context)) return context;
   const { id } = await params;
   const { getProjectOverview } = await import("../../../../../../db/projects");
-  const overview = await getProjectOverview(id);
+  const overview = await getProjectOverview(id, {
+    backlog: context.principal.permissions.includes("backlog.view"),
+    sprints: context.principal.permissions.includes("sprint.view"),
+    metrics: context.principal.permissions.includes("delivery.metrics.view"),
+  });
   if (!overview) return apiError(404, "PROJECT_NOT_FOUND", "Project was not found.", context.correlationId, context.timestamp);
   return Response.json({ data: overview, meta: { correlationId: context.correlationId, timestamp: context.timestamp } }, { headers: { "cache-control": "no-store" } });
 }
