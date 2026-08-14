@@ -1,4 +1,4 @@
-import type { AdvancedWorkItemSource, ConnectionTestResult, DevelopmentMetrics, EngineeringDeliveryProvider, ExternalWorkItem, ExternalWorkItemRelation, SprintMetrics } from "./engineering-delivery-provider";
+import type { AdvancedWorkItemSource, ConnectionTestResult, DevelopmentMetrics, EngineeringDeliveryProvider, ExternalIteration, ExternalSprintSource, ExternalWorkItem, ExternalWorkItemRelation, SprintMetrics } from "./engineering-delivery-provider";
 
 type Config = { organization: string; authType: "ENTRA_APPLICATION" | "PAT"; credential: string };
 type AzureList<T> = { count: number; value: T[] };
@@ -43,13 +43,22 @@ export class AzureDevOpsProvider implements EngineeringDeliveryProvider {
   private async query<T>(path: string, body: unknown) { return (await this.call<T>(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })).body; }
 
   private async listAll<T>(path: string) {
+    return (await this.listAllWithMeta<T>(path)).values;
+  }
+
+  private async listAllWithMeta<T>(path: string) {
     const values: T[] = []; let continuationToken: string | null = null, pages = 0;
     do {
       const separator = path.includes("?") ? "&" : "?", page: { body: AzureList<T>; continuationToken: string | null } = await this.call<AzureList<T>>(`${path}${continuationToken ? `${separator}continuationToken=${encodeURIComponent(continuationToken)}` : ""}`);
       values.push(...page.body.value); continuationToken = page.continuationToken; pages += 1;
       if (pages >= 50 && continuationToken) throw new Error("Azure pagination exceeded the safe page limit.");
     } while (continuationToken);
-    return values;
+    return { values, pages };
+  }
+
+  private async revision(input: string) {
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input || "EMPTY"));
+    return Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, "0")).join("");
   }
 
   async testConnection(): Promise<ConnectionTestResult> {
@@ -61,6 +70,12 @@ export class AzureDevOpsProvider implements EngineeringDeliveryProvider {
   async getProjects() { const rows = await this.listAll<{ id: string; name: string; description?: string; state: string; url: string }>("/_apis/projects?stateFilter=WellFormed&$top=100&api-version=7.1"); return rows.map(project => ({ id: project.id, name: project.name, description: project.description ?? null, state: project.state, url: project.url })); }
   async getTeams(projectId: string) { const rows = await this.listAll<{ id: string; name: string; description?: string; url: string }>(`/_apis/projects/${encodeURIComponent(projectId)}/teams?$top=100&api-version=7.1`); return rows.map(team => ({ id: team.id, name: team.name, description: team.description ?? null, url: team.url })); }
   async getIterations(projectId: string, teamId: string) { const rows = await this.listAll<{ id: string; name: string; path: string; attributes?: { startDate?: string; finishDate?: string } }>(`/${encodeURIComponent(projectId)}/${encodeURIComponent(teamId)}/_apis/work/teamsettings/iterations?api-version=7.1`); return rows.map(iteration => ({ id: iteration.id, name: iteration.name, path: iteration.path, startDate: iteration.attributes?.startDate ?? null, finishDate: iteration.attributes?.finishDate ?? null })); }
+  async getSprintHistory(projectId: string, teamId: string): Promise<ExternalSprintSource> {
+    const result = await this.listAllWithMeta<{ id: string; name: string; path: string; attributes?: { startDate?: string; finishDate?: string } }>(`/${encodeURIComponent(projectId)}/${encodeURIComponent(teamId)}/_apis/work/teamsettings/iterations?api-version=7.1`);
+    const all: ExternalIteration[] = result.values.map(iteration => ({ id: iteration.id, name: iteration.name, path: iteration.path, startDate: iteration.attributes?.startDate ?? null, finishDate: iteration.attributes?.finishDate ?? null })).filter(iteration => Boolean(iteration.startDate && iteration.finishDate)).sort((left, right) => `${right.finishDate}:${right.id}`.localeCompare(`${left.finishDate}:${left.id}`));
+    const iterations = all.slice(0, 50), sourceRevision = await this.revision(iterations.map(iteration => `${iteration.id}:${iteration.path}:${iteration.startDate}:${iteration.finishDate}`).join("|"));
+    return { iterations, pagesRead: result.pages, sourceRevision, retrievedAt: new Date().toISOString(), complete: true, truncated: all.length > iterations.length };
+  }
   async getCurrentSprint(projectId: string, teamId: string) { const rows = await this.listAll<{ id: string; name: string; path: string; attributes?: { startDate?: string; finishDate?: string } }>(`/${encodeURIComponent(projectId)}/${encodeURIComponent(teamId)}/_apis/work/teamsettings/iterations?$timeframe=current&api-version=7.1`), iteration = rows[0]; return iteration ? { id: iteration.id, name: iteration.name, path: iteration.path, startDate: iteration.attributes?.startDate ?? null, finishDate: iteration.attributes?.finishDate ?? null } : null; }
 
   async getWorkItems(projectId: string, ids: number[]) {
@@ -81,8 +96,7 @@ export class AzureDevOpsProvider implements EngineeringDeliveryProvider {
     }
     const items = rawItems.map(item => this.toExternalWorkItem(projectId, item));
     const revisionInput = items.map(item => `${item.externalId}:${item.externalRevision}`).sort().join("|") || "EMPTY";
-    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(revisionInput));
-    const sourceRevision = Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, "0")).join("");
+    const sourceRevision = await this.revision(revisionInput);
     return { items, pagesRead: 1 + Math.ceil(ids.length / 200), sourceRevision, retrievedAt: new Date().toISOString(), complete: ids.length < 20000 && rawItems.length === ids.length };
   }
 

@@ -47,7 +47,7 @@ test("Integration UI exposes mapping administration and normalized work-item ref
   const [center, manager, panel, shell, styles] = await Promise.all([read("app/integrations/integration-center.tsx"), read("app/integrations/azure-mapping-manager.tsx"), read("app/integrations/azure-sync-panel.tsx"), read("app/command-center-shell.tsx"), read("app/globals.css")]);
   for (const value of ["Normalization mappings", "Read-only Stage 2 integration", "AzureMappingManager"]) assert.match(center, new RegExp(value));
   for (const value of ["PROCESS NORMALIZATION", "Use recommended set", "External values remain visible", "Save mappings"]) assert.match(manager, new RegExp(value));
-  for (const value of ["Sync normalized work", "advanced-sync", "mapping warnings"]) assert.match(panel, new RegExp(value));
-  assert.match(shell, /Stage 2 · Step 8/);
+  for (const value of ["Sync work \\+ Sprint evidence", "advanced-sync", "mapping warnings"]) assert.match(panel, new RegExp(value));
+  assert.match(shell, /Stage 2 · Step 9/);
   for (const value of ["mapping-dialog", "mapping-list", "mapping-toolbar"]) assert.match(styles, new RegExp(value));
 });

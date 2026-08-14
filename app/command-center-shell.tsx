@@ -156,12 +156,12 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
                 : active === "Reports" ? "Controlled portfolio reports generated directly from persisted management evidence."
                 : active === "Audit Trail" ? "Read-only evidence of governed changes, actors, sources and correlation identifiers."
                 : active === "Backlog" ? "A governed Epic-to-Bug hierarchy for local planning and source-labelled delivery evidence."
-                : active === "Sprints" ? "Plan local delivery commitments with explicit goals, dates, capacity, ordering and dependency evidence."
-                : active === "Integrations" ? "Normalize read-only Azure DevOps work-item evidence through governed Project, Team, type and state mappings."
+                : active === "Sprints" ? "Plan local commitments and inspect source-labelled Azure velocity, burndown, Bugs, blockers and Sprint health."
+                : active === "Integrations" ? "Normalize read-only Azure DevOps work-item and Team iteration evidence through governed mappings."
                 : `${active} is included in the approved Stage 1 delivery sequence.`}
               </p>
             </div>
-            <div className="step-chip">{active === "Backlog" ? "Stage 2 · Step 5" : active === "Sprints" ? "Stage 2 · Step 7" : active === "Integrations" ? "Stage 2 · Step 8" : `Implementation step ${current?.step ?? 1}`}</div>
+            <div className="step-chip">{active === "Backlog" ? "Stage 2 · Step 5" : active === "Sprints" || active === "Integrations" ? "Stage 2 · Step 9" : `Implementation step ${current?.step ?? 1}`}</div>
           </section>
 
           {active === "Dashboard" ? (
@@ -173,7 +173,7 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
           ) : active === "Backlog" ? (
             <><BacklogCenter canCreate={principal.permissions.includes("backlog.create")} canEdit={principal.permissions.includes("backlog.edit")} canArchive={principal.permissions.includes("backlog.archive")} /><StoryCriteriaCenter canEdit={principal.permissions.includes("backlog.edit")} /><DependencyCenter canEdit={principal.permissions.includes("backlog.edit")} /></>
           ) : active === "Sprints" ? (
-            <SprintCenter canCreate={principal.permissions.includes("sprint.create")} canPlan={principal.permissions.includes("sprint.plan")} canActivate={principal.permissions.includes("sprint.activate")} canComplete={principal.permissions.includes("sprint.complete")} />
+            <SprintCenter canCreate={principal.permissions.includes("sprint.create")} canPlan={principal.permissions.includes("sprint.plan")} canActivate={principal.permissions.includes("sprint.activate")} canComplete={principal.permissions.includes("sprint.complete")} canViewMetrics={principal.permissions.includes("delivery.metrics.view")} />
           ) : active === "Milestones" ? (
             <MilestoneCenter canCreate={principal.permissions.includes("milestone.create")} canEdit={principal.permissions.includes("milestone.edit")} canArchive={principal.permissions.includes("milestone.archive")} />
           ) : active === "RAID" ? (

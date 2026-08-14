@@ -33,5 +33,5 @@ test("Sprint APIs enforce atomic permissions validation and stable planning erro
 test("Sprint UI exposes portfolio planner capacity dependency and lifecycle truth", async () => {
   const source = await read("app/delivery/sprint-center.tsx"), shell = await read("app/command-center-shell.tsx");
   for (const value of ["Sprint Portfolio", "New Sprint", "Sprint goal", "Capacity", "Story commitment", "Ready Backlog", "Sprint Backlog", "Dependency unresolved", "Hours and points remain separate", "Activate Sprint", "Complete Sprint", "Immutable activation baseline"]) assert.match(source, new RegExp(value));
-  assert.match(shell, /label: "Sprints"/); assert.match(shell, /Stage 2 · Step 7/);
+  assert.match(shell, /label: "Sprints"/); assert.match(shell, /Stage 2 · Step 9/);
 });

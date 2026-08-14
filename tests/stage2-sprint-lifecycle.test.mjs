@@ -38,7 +38,7 @@ test("lifecycle APIs independently authorize activation planning and completion"
 test("Sprint UI exposes baseline scope-change completion and carryover workflows", async () => {
   const source = await read("app/delivery/sprint-center.tsx"), shell = await read("app/command-center-shell.tsx"), styles = await read("app/globals.css");
   for (const value of ["Activate Sprint", "freeze the current commitment baseline", "Immutable activation baseline", "audited scope change", "Disposition every Sprint item", "Target Planned Sprint", "Completed Sprint evidence is read-only", "status: \"PLANNED\""]) assert.match(source, new RegExp(value));
-  assert.match(shell, /Stage 2 · Step 7/);
+  assert.match(shell, /Stage 2 · Step 9/);
   assert.match(shell, /canActivate=.*sprint\.activate/);
   assert.match(shell, /canComplete=.*sprint\.complete/);
   for (const value of ["baseline-evidence", "completion-panel", "completion-list", "lifecycle-actions"]) assert.match(styles, new RegExp(value));
