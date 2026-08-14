@@ -38,7 +38,6 @@ const navigation: NavItem[] = [
   { label: "Reports", icon: "▥", step: 16, permission: "report.view" },
   { label: "Integrations", icon: "↔", step: 8, permission: "integration.view" },
   { label: "Audit Trail", icon: "◎", step: 17, permission: "audit.view" },
-  { label: "Administration", icon: "⚙", step: 3, permission: "admin.users" },
 ];
 
 function initials(user: ChatGPTUser) {
@@ -56,7 +55,6 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
   const allowedNavigation = navigation.filter((item) => principal.permissions.includes(item.permission));
   const [active, setActive] = useState("Dashboard");
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [notice, setNotice] = useState(false);
   const [deliveryProjectId, setDeliveryProjectId] = useState("");
   const current = allowedNavigation.find((item) => item.label === active) ?? allowedNavigation[0];
 
@@ -71,7 +69,6 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
   const select = (label: string) => {
     setActive(label);
     setMobileOpen(false);
-    setNotice(false);
   };
 
   return (
@@ -111,8 +108,8 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
         </nav>
 
         <div className="sidebar-footer">
-          <div className="build-status"><span aria-hidden="true" /> Stage 2 build</div>
-          <p>Operational controls active</p>
+          <div className="build-status"><span aria-hidden="true" /> Stage 2 release</div>
+          <p>Azure certification pending</p>
         </div>
       </aside>
 
@@ -130,8 +127,6 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
             <span>Command Center</span><b aria-hidden="true">/</b><strong>{active}</strong>
           </div>
           <div className="top-actions">
-            <button className="icon-button" aria-label="Search" onClick={() => setNotice(true)}>⌕</button>
-            <button className="icon-button notification" aria-label="Notifications" onClick={() => setNotice(true)}>♢<i /></button>
             <div className="avatar" aria-hidden="true">{initials(user)}</div>
             <div className="user-label">
               <strong>{user.displayName}</strong>
@@ -142,13 +137,6 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
         </header>
 
         <main id="main-content" className="content" tabIndex={-1}>
-          {notice && (
-            <div className="inline-notice" role="status">
-              Search and notifications are scheduled for their authorized Stage 1 steps.
-              <button onClick={() => setNotice(false)} aria-label="Dismiss message">×</button>
-            </div>
-          )}
-
           <section className="page-intro">
             <div>
               <div className="eyebrow">{["Dashboard", "Projects", "Reports", "Backlog", "Sprints", "Integrations", "Audit Trail"].includes(active) ? "STAGE 2 · AGILE DELIVERY" : "STAGE 1 · CORE MANAGEMENT MVP"}</div>
@@ -189,51 +177,7 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
             <><IntegrationCenter canConfigure={principal.permissions.includes("integration.configure")} /><AzureSyncPanel canSync={principal.permissions.includes("integration.sync")} /></>
           ) : active === "Audit Trail" ? (
             <>{principal.permissions.includes("integration.diagnostics") && <OperationalControlCenter />}<AuditCenter /></>
-          ) : <><section className="foundation-panel" aria-labelledby="foundation-title">
-            <div className="foundation-copy">
-              <div className="foundation-icon" aria-hidden="true">⌁</div>
-              <div>
-                <span className="section-kicker">APPLICATION FOUNDATION</span>
-                <h2 id="foundation-title">The command center shell is ready</h2>
-                <p>
-                  Stage 1 is being delivered in the mandated sequence. This screen intentionally contains no
-                  fabricated portfolio statistics or placeholder business records.
-                </p>
-              </div>
-            </div>
-            <div className="foundation-state"><span /> Shell active</div>
-          </section>
-
-          <section className="sequence" aria-labelledby="sequence-title">
-            <div className="section-heading">
-              <div><span className="section-kicker">DELIVERY CONTROL</span><h2 id="sequence-title">Authorized implementation sequence</h2></div>
-              <span className="sequence-count">1 of 18 in progress</span>
-            </div>
-            <div className="sequence-grid">
-              <article className="sequence-card current-card">
-                <span className="step-number">01</span>
-                <div><h3>Application Shell</h3><p>Responsive navigation, accessible structure and enterprise design system.</p></div>
-                <span className="status-pill in-progress">In progress</span>
-              </article>
-              <article className="sequence-card">
-                <span className="step-number">02</span>
-                <div><h3>Authentication</h3><p>Private access and verified workspace identity.</p></div>
-                <span className="status-pill queued">Next</span>
-              </article>
-              <article className="sequence-card">
-                <span className="step-number">03</span>
-                <div><h3>Roles &amp; Permissions</h3><p>Server-enforced, deny-by-default access policies.</p></div>
-                <span className="status-pill planned">Planned</span>
-              </article>
-            </div>
-          </section>
-
-          <section className="principles" aria-label="Implementation principles">
-            <div><span className="principle-icon shield" aria-hidden="true">◆</span><div><strong>Secure by design</strong><p>Authorization and secrets remain server-side.</p></div></div>
-            <div><span className="principle-icon data" aria-hidden="true">≡</span><div><strong>Persisted truth</strong><p>Business data will come from relational storage.</p></div></div>
-            <div><span className="principle-icon trace" aria-hidden="true">↗</span><div><strong>Full traceability</strong><p>Governed changes create an audit history.</p></div></div>
-          </section>
-          </>}
+          ) : <section className="empty-state"><strong>Module unavailable</strong><p>This capability is not part of the authorized release navigation.</p></section>}
         </main>
       </div>
     </div>
