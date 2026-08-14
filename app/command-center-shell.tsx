@@ -12,6 +12,7 @@ import { RaidCenter } from "./raid/raid-center";
 import { IdeaCenter } from "./ideas/idea-center";
 import { ExecutiveDashboard } from "./dashboard/executive-dashboard";
 import { ReportCenter } from "./reports/report-center";
+import { AuditCenter } from "./audit/audit-center";
 
 type NavItem = {
   label: string;
@@ -29,6 +30,7 @@ const navigation: NavItem[] = [
   { label: "RAID", icon: "△", step: 13, permission: "raid.view" },
   { label: "Reports", icon: "▥", step: 16, permission: "report.view" },
   { label: "Integrations", icon: "↔", step: 8, permission: "integration.view" },
+  { label: "Audit Trail", icon: "◎", step: 17, permission: "audit.view" },
   { label: "Administration", icon: "⚙", step: 3, permission: "admin.users" },
 ];
 
@@ -146,6 +148,7 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
               <p>{active === "Dashboard"
                 ? "A single operational view of products, projects, delivery health and management attention."
                 : active === "Reports" ? "Controlled portfolio reports generated directly from persisted management evidence."
+                : active === "Audit Trail" ? "Read-only evidence of governed changes, actors, sources and correlation identifiers."
                 : `${active} is included in the approved Stage 1 delivery sequence.`}
               </p>
             </div>
@@ -168,6 +171,8 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
             <ReportCenter canExport={principal.permissions.includes("report.export")} />
           ) : active === "Integrations" ? (
             <><IntegrationCenter canConfigure={principal.permissions.includes("integration.configure")} /><AzureSyncPanel canSync={principal.permissions.includes("integration.sync")} /></>
+          ) : active === "Audit Trail" ? (
+            <AuditCenter />
           ) : <><section className="foundation-panel" aria-labelledby="foundation-title">
             <div className="foundation-copy">
               <div className="foundation-icon" aria-hidden="true">⌁</div>
