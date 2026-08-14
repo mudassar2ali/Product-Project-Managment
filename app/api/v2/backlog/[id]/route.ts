@@ -1,1 +1,56 @@
-import{authorizeApi,apiError,isResponse}from"../../../v1/api-helpers";import{validateBacklogInput}from"../../../../delivery/backlog-contract";export async function GET(_r:Request,{params}:{params:Promise<{id:string}>}){const c=await authorizeApi('backlog.view');if(isResponse(c))return c;const{id}=await params,{getBacklog}=await import('../../../../../db/backlog'),x=await getBacklog(id);if(!x)return apiError(404,'BACKLOG_ITEM_NOT_FOUND','Backlog item was not found.',c.correlationId,c.timestamp);return Response.json({data:x},{headers:{'cache-control':'no-store'}})}export async function PATCH(r:Request,{params}:{params:Promise<{id:string}>}){const c=await authorizeApi('backlog.edit');if(isResponse(c))return c;let b:any;try{b=await r.json()}catch{return apiError(400,'INVALID_JSON','Request body must be valid JSON.',c.correlationId,c.timestamp)}const v=validateBacklogInput(b);if(!v.ok)return apiError(422,'VALIDATION_FAILED','Review the highlighted fields.',c.correlationId,c.timestamp,v.details);const{id}=await params,{updateBacklog}=await import('../../../../../db/backlog'),x=await updateBacklog(id,v.value,Number(b.version),c.principal.user.userId,c.correlationId),map={not_found:[404,'BACKLOG_ITEM_NOT_FOUND','Backlog item was not found.'],read_only:[409,'AZURE_ORIGIN_READ_ONLY','Azure-origin work is read-only.'],invalid_parent:[422,'INVALID_PARENT','Select a valid parent without creating a hierarchy cycle.'],conflict:[409,'VERSION_CONFLICT','This item changed. Refresh and try again.']}as const;if(x.kind!=='ok'){const m=map[x.kind];return apiError(m[0],m[1],m[2],c.correlationId,c.timestamp)}return Response.json({data:{ok:true}})}export async function DELETE(r:Request,{params}:{params:Promise<{id:string}>}){const c=await authorizeApi('backlog.archive');if(isResponse(c))return c;const{id}=await params,{archiveBacklog}=await import('../../../../../db/backlog'),x=await archiveBacklog(id,Number(new URL(r.url).searchParams.get('version')),c.principal.user.userId,c.correlationId),map={not_found:[404,'BACKLOG_ITEM_NOT_FOUND','Backlog item was not found.'],read_only:[409,'AZURE_ORIGIN_READ_ONLY','Azure-origin work is read-only.'],has_children:[409,'BACKLOG_HAS_CHILDREN','Archive child items first.'],conflict:[409,'VERSION_CONFLICT','This item changed. Refresh and try again.']}as const;if(x.kind!=='ok'){const m=map[x.kind];return apiError(m[0],m[1],m[2],c.correlationId,c.timestamp)}return new Response(null,{status:204,headers:{'cache-control':'no-store'}})}
+import { authorizeApi, apiError, isResponse } from "../../../v1/api-helpers";
+import { validateBacklogInput } from "../../../../delivery/backlog-contract";
+
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const context = await authorizeApi("backlog.view");
+  if (isResponse(context)) return context;
+  const { id } = await params;
+  const { getBacklog } = await import("../../../../../db/backlog");
+  const item = await getBacklog(id);
+  if (!item) return apiError(404, "BACKLOG_ITEM_NOT_FOUND", "Backlog item was not found.", context.correlationId, context.timestamp);
+  return Response.json({ data: item }, { headers: { "cache-control": "no-store" } });
+}
+
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const context = await authorizeApi("backlog.edit");
+  if (isResponse(context)) return context;
+  let body: unknown;
+  try { body = await request.json(); } catch { return apiError(400, "INVALID_JSON", "Request body must be valid JSON.", context.correlationId, context.timestamp); }
+  const validation = validateBacklogInput(body);
+  if (!validation.ok) return apiError(422, "VALIDATION_FAILED", "Review the highlighted fields.", context.correlationId, context.timestamp, validation.details);
+  const { id } = await params;
+  const { updateBacklog } = await import("../../../../../db/backlog");
+  try {
+    const version = Number((body as Record<string, unknown>).version);
+    const result = await updateBacklog(id, validation.value, version, context.principal.user.userId, context.correlationId);
+    const map = {
+      not_found: [404, "BACKLOG_ITEM_NOT_FOUND", "Backlog item was not found."],
+      read_only: [409, "AZURE_ORIGIN_READ_ONLY", "Azure-origin work is read-only."],
+      invalid_parent: [422, "INVALID_PARENT", "Select a valid parent without creating a hierarchy cycle."],
+      conflict: [409, "VERSION_CONFLICT", "This item changed. Refresh and try again."],
+    } as const;
+    if (result.kind !== "ok") { const error = map[result.kind]; return apiError(error[0], error[1], error[2], context.correlationId, context.timestamp); }
+    return Response.json({ data: { ok: true } });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (message.includes("STORY_NOT_READY")) return apiError(409, "STORY_NOT_READY", "Complete the Story narrative and Acceptance Criteria before marking it Ready.", context.correlationId, context.timestamp);
+    if (message.includes("UNRESOLVED_DEPENDENCY") || message.includes("READY_SUCCESSOR_DEPENDS_ON_ITEM")) return apiError(409, "UNRESOLVED_DEPENDENCY", "Resolve blocking dependencies before changing readiness.", context.correlationId, context.timestamp);
+    return apiError(500, "BACKLOG_UPDATE_FAILED", "The Backlog item could not be updated.", context.correlationId, context.timestamp);
+  }
+}
+
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const context = await authorizeApi("backlog.archive");
+  if (isResponse(context)) return context;
+  const { id } = await params;
+  const { archiveBacklog } = await import("../../../../../db/backlog");
+  const result = await archiveBacklog(id, Number(new URL(request.url).searchParams.get("version")), context.principal.user.userId, context.correlationId);
+  const map = {
+    not_found: [404, "BACKLOG_ITEM_NOT_FOUND", "Backlog item was not found."],
+    read_only: [409, "AZURE_ORIGIN_READ_ONLY", "Azure-origin work is read-only."],
+    has_children: [409, "BACKLOG_HAS_CHILDREN", "Archive child items first."],
+    conflict: [409, "VERSION_CONFLICT", "This item changed. Refresh and try again."],
+  } as const;
+  if (result.kind !== "ok") { const error = map[result.kind]; return apiError(error[0], error[1], error[2], context.correlationId, context.timestamp); }
+  return new Response(null, { status: 204, headers: { "cache-control": "no-store" } });
+}

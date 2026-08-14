@@ -15,6 +15,7 @@ import { ReportCenter } from "./reports/report-center";
 import { AuditCenter } from "./audit/audit-center";
 import { BacklogCenter } from "./delivery/backlog-center";
 import { StoryCriteriaCenter } from "./delivery/story-criteria-center";
+import { DependencyCenter } from "./delivery/dependency-center";
 
 type NavItem = {
   label: string;
@@ -156,7 +157,7 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
                 : `${active} is included in the approved Stage 1 delivery sequence.`}
               </p>
             </div>
-            <div className="step-chip">{active === "Backlog" ? "Stage 2 · Step 3" : `Implementation step ${current?.step ?? 1}`}</div>
+            <div className="step-chip">{active === "Backlog" ? "Stage 2 · Step 5" : `Implementation step ${current?.step ?? 1}`}</div>
           </section>
 
           {active === "Dashboard" ? (
@@ -166,7 +167,7 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
           ) : active === "Projects" ? (
             <ProjectPortfolio canCreate={principal.permissions.includes("project.create")} canEdit={principal.permissions.includes("project.edit")} />
           ) : active === "Backlog" ? (
-            <><BacklogCenter canCreate={principal.permissions.includes("backlog.create")} canEdit={principal.permissions.includes("backlog.edit")} canArchive={principal.permissions.includes("backlog.archive")} /><StoryCriteriaCenter canEdit={principal.permissions.includes("backlog.edit")} /></>
+            <><BacklogCenter canCreate={principal.permissions.includes("backlog.create")} canEdit={principal.permissions.includes("backlog.edit")} canArchive={principal.permissions.includes("backlog.archive")} /><StoryCriteriaCenter canEdit={principal.permissions.includes("backlog.edit")} /><DependencyCenter canEdit={principal.permissions.includes("backlog.edit")} /></>
           ) : active === "Milestones" ? (
             <MilestoneCenter canCreate={principal.permissions.includes("milestone.create")} canEdit={principal.permissions.includes("milestone.edit")} canArchive={principal.permissions.includes("milestone.archive")} />
           ) : active === "RAID" ? (
