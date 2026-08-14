@@ -8,6 +8,9 @@ export const permissions = [
   "milestone.view", "milestone.create", "milestone.edit", "milestone.archive",
   "raid.view", "raid.create", "raid.edit", "raid.archive", "raid.escalate", "raid.export",
   "idea.view", "idea.create", "idea.edit", "idea.review", "idea.convert",
+  "backlog.view", "backlog.create", "backlog.edit", "backlog.archive",
+  "sprint.view", "sprint.create", "sprint.plan", "sprint.activate", "sprint.complete",
+  "delivery.metrics.view",
   "report.view", "report.export",
   "integration.view", "integration.configure", "integration.sync", "integration.diagnostics",
   "admin.users", "admin.roles", "admin.settings", "audit.view",
@@ -18,7 +21,7 @@ export type RoleCode = keyof typeof rolePermissions;
 
 const viewerPermissions: PermissionCode[] = [
   "dashboard.view", "product.view", "project.view", "milestone.view", "raid.view",
-  "idea.view", "report.view", "integration.view",
+  "idea.view", "backlog.view", "sprint.view", "delivery.metrics.view", "report.view", "integration.view",
 ];
 
 export const rolePermissions = {
@@ -33,14 +36,17 @@ export const rolePermissions = {
     "milestone.create", "milestone.edit",
     "raid.create", "raid.edit", "raid.escalate", "raid.export",
     "idea.create", "idea.edit", "idea.review", "idea.convert",
+    "backlog.create", "backlog.edit", "backlog.archive",
+    "sprint.create", "sprint.plan", "sprint.activate", "sprint.complete",
     "report.export", "integration.sync",
   ],
   BUSINESS_ANALYST: [
     ...viewerPermissions, "milestone.create", "milestone.edit", "raid.create", "raid.edit",
-    "idea.create", "idea.edit", "idea.review",
+    "idea.create", "idea.edit", "idea.review", "backlog.create", "backlog.edit",
   ],
   ENGINEERING_LEAD: [
-    ...viewerPermissions, "project.edit", "milestone.edit", "raid.create", "raid.edit", "integration.sync",
+    ...viewerPermissions, "project.edit", "milestone.edit", "raid.create", "raid.edit",
+    "backlog.create", "backlog.edit", "sprint.create", "sprint.plan", "sprint.activate", "sprint.complete", "integration.sync",
   ],
   DEVELOPER: ["dashboard.view", "product.view", "project.view", "milestone.view", "raid.view", "raid.edit", "integration.view"],
   QA: [...viewerPermissions, "project.edit", "raid.create", "raid.edit"],
