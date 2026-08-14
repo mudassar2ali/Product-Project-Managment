@@ -40,6 +40,14 @@ const eslintConfig = defineConfig([
     files: ["app/api/v1/milestones/**/*.ts", "app/milestones/*.tsx", "db/milestones.ts"],
     rules: { "@typescript-eslint/no-explicit-any": "off" },
   },
+  {
+    files: ["app/api/v2/backlog/**/*.ts"],
+    rules: { "@typescript-eslint/no-explicit-any": "off" },
+  },
+  {
+    files: ["tests/stage2-backlog-crud.test.mjs"],
+    rules: { "no-useless-escape": "off" },
+  },
 ]);
 
 export default eslintConfig;

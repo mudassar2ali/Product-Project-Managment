@@ -13,6 +13,7 @@ import { IdeaCenter } from "./ideas/idea-center";
 import { ExecutiveDashboard } from "./dashboard/executive-dashboard";
 import { ReportCenter } from "./reports/report-center";
 import { AuditCenter } from "./audit/audit-center";
+import { BacklogCenter } from "./delivery/backlog-center";
 
 type NavItem = {
   label: string;
@@ -25,6 +26,7 @@ const navigation: NavItem[] = [
   { label: "Dashboard", icon: "⌂", step: 15, permission: "dashboard.view" },
   { label: "Products", icon: "◫", step: 5, permission: "product.view" },
   { label: "Projects", icon: "◇", step: 6, permission: "project.view" },
+  { label: "Backlog", icon: "☷", step: 3, permission: "backlog.view" },
   { label: "Milestones", icon: "◆", step: 12, permission: "milestone.view" },
   { label: "Ideas", icon: "✦", step: 14, permission: "idea.view" },
   { label: "RAID", icon: "△", step: 13, permission: "raid.view" },
@@ -143,16 +145,17 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
 
           <section className="page-intro">
             <div>
-              <div className="eyebrow">STAGE 1 · CORE MANAGEMENT MVP</div>
+              <div className="eyebrow">{active === "Backlog" ? "STAGE 2 · AGILE DELIVERY" : "STAGE 1 · CORE MANAGEMENT MVP"}</div>
               <h1>{active}</h1>
               <p>{active === "Dashboard"
                 ? "A single operational view of products, projects, delivery health and management attention."
                 : active === "Reports" ? "Controlled portfolio reports generated directly from persisted management evidence."
                 : active === "Audit Trail" ? "Read-only evidence of governed changes, actors, sources and correlation identifiers."
+                : active === "Backlog" ? "A governed Epic-to-Bug hierarchy for local planning and source-labelled delivery evidence."
                 : `${active} is included in the approved Stage 1 delivery sequence.`}
               </p>
             </div>
-            <div className="step-chip">Implementation step {current?.step ?? 1}</div>
+            <div className="step-chip">{active === "Backlog" ? "Stage 2 · Step 3" : `Implementation step ${current?.step ?? 1}`}</div>
           </section>
 
           {active === "Dashboard" ? (
@@ -161,6 +164,8 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
             <ProductPortfolio canCreate={principal.permissions.includes("product.create")} canEdit={principal.permissions.includes("product.edit")} />
           ) : active === "Projects" ? (
             <ProjectPortfolio canCreate={principal.permissions.includes("project.create")} canEdit={principal.permissions.includes("project.edit")} />
+          ) : active === "Backlog" ? (
+            <BacklogCenter canCreate={principal.permissions.includes("backlog.create")} canEdit={principal.permissions.includes("backlog.edit")} canArchive={principal.permissions.includes("backlog.archive")} />
           ) : active === "Milestones" ? (
             <MilestoneCenter canCreate={principal.permissions.includes("milestone.create")} canEdit={principal.permissions.includes("milestone.edit")} canArchive={principal.permissions.includes("milestone.archive")} />
           ) : active === "RAID" ? (
