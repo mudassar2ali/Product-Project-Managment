@@ -30,8 +30,8 @@ test("Sprint APIs enforce atomic permissions validation and stable planning erro
   for (const value of ["sprint.view", "sprint.create", "sprint.plan", "VERSION_CONFLICT", "SPRINT_LOCKED", "BACKLOG_ITEM_ALREADY_ASSIGNED", "UNRESOLVED_DEPENDENCY", "INVALID_SPRINT_ORDER", "AZURE_ORIGIN_READ_ONLY"]) assert.match(source, new RegExp(value.replace(".", "\\.")));
 });
 
-test("Sprint UI exposes portfolio planner capacity dependency and deferred lifecycle truth", async () => {
+test("Sprint UI exposes portfolio planner capacity dependency and lifecycle truth", async () => {
   const source = await read("app/delivery/sprint-center.tsx"), shell = await read("app/command-center-shell.tsx");
-  for (const value of ["Sprint Portfolio", "New Sprint", "Sprint goal", "Capacity", "Story commitment", "Ready Backlog", "Sprint Backlog", "Dependency unresolved", "Hours and points remain separate", "Activation, baseline freezing, completion and carryover are authorized for Step 7"]) assert.match(source, new RegExp(value));
-  assert.match(shell, /label: "Sprints"/); assert.match(shell, /Stage 2 · Step 6/); assert.doesNotMatch(source, />Activate</);
+  for (const value of ["Sprint Portfolio", "New Sprint", "Sprint goal", "Capacity", "Story commitment", "Ready Backlog", "Sprint Backlog", "Dependency unresolved", "Hours and points remain separate", "Activate Sprint", "Complete Sprint", "Immutable activation baseline"]) assert.match(source, new RegExp(value));
+  assert.match(shell, /label: "Sprints"/); assert.match(shell, /Stage 2 · Step 7/);
 });

@@ -160,7 +160,7 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
                 : `${active} is included in the approved Stage 1 delivery sequence.`}
               </p>
             </div>
-            <div className="step-chip">{active === "Backlog" ? "Stage 2 · Step 5" : active === "Sprints" ? "Stage 2 · Step 6" : `Implementation step ${current?.step ?? 1}`}</div>
+            <div className="step-chip">{active === "Backlog" ? "Stage 2 · Step 5" : active === "Sprints" ? "Stage 2 · Step 7" : `Implementation step ${current?.step ?? 1}`}</div>
           </section>
 
           {active === "Dashboard" ? (
@@ -172,7 +172,7 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
           ) : active === "Backlog" ? (
             <><BacklogCenter canCreate={principal.permissions.includes("backlog.create")} canEdit={principal.permissions.includes("backlog.edit")} canArchive={principal.permissions.includes("backlog.archive")} /><StoryCriteriaCenter canEdit={principal.permissions.includes("backlog.edit")} /><DependencyCenter canEdit={principal.permissions.includes("backlog.edit")} /></>
           ) : active === "Sprints" ? (
-            <SprintCenter canCreate={principal.permissions.includes("sprint.create")} canPlan={principal.permissions.includes("sprint.plan")} />
+            <SprintCenter canCreate={principal.permissions.includes("sprint.create")} canPlan={principal.permissions.includes("sprint.plan")} canActivate={principal.permissions.includes("sprint.activate")} canComplete={principal.permissions.includes("sprint.complete")} />
           ) : active === "Milestones" ? (
             <MilestoneCenter canCreate={principal.permissions.includes("milestone.create")} canEdit={principal.permissions.includes("milestone.edit")} canArchive={principal.permissions.includes("milestone.archive")} />
           ) : active === "RAID" ? (
