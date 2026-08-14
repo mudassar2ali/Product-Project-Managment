@@ -90,7 +90,7 @@ export async function createProject(input: ProjectInput, actor: string, correlat
   const id=crypto.randomUUID(), businessId=await nextBusinessId();
   const statements = [env.DB.prepare(`INSERT INTO projects (id,business_id,product_id,name,code,description,objective,business_value,scope,out_of_scope,start_date,target_end_date,actual_end_date,priority,status,health,overall_progress,requirements_progress,design_progress,development_progress,qa_progress,uat_progress,sign_off_progress,deployment_progress,sign_off_status,release_status,budget_amount,budget_currency,market,customer,comments,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(id,businessId,...projectValues(input),actor,actor)];
   for (const stage of stageKeys) statements.push(env.DB.prepare("INSERT INTO project_stage_weights (id,project_id,stage,weight,created_by,updated_by) VALUES (?,?,?,?,?,?)").bind(crypto.randomUUID(),id,stage,input.weights[stage],actor,actor));
-  statements.push(env.DB.prepare(`INSERT INTO audit_logs (id,entity_type,entity_id,action,after_json,source,correlation_id) VALUES (?,?,?,?,?,'APPLICATION',?)`).bind(crypto.randomUUID(),"Project",id,"CREATE",JSON.stringify({businessId,name:input.name,code:input.code,productId:input.productId,health:input.health}),correlationId));
+  statements.push(env.DB.prepare(`INSERT INTO audit_logs (id,entity_type,entity_id,action,after_json,actor_user_id,source,correlation_id) VALUES (?,?,?,?,?,?,'APPLICATION',?)`).bind(crypto.randomUUID(),"Project",id,"CREATE",JSON.stringify({businessId,name:input.name,code:input.code,productId:input.productId,health:input.health}),actor,correlationId));
   await env.DB.batch(statements);
   return { kind: "ok" as const, project: await getProject(id) };
 }
@@ -101,7 +101,7 @@ export async function updateProject(id: string,input: ProjectInput,expectedVersi
   const result=await env.DB.prepare(`UPDATE projects SET product_id=?,name=?,code=?,description=?,objective=?,business_value=?,scope=?,out_of_scope=?,start_date=?,target_end_date=?,actual_end_date=?,priority=?,status=?,health=?,overall_progress=?,requirements_progress=?,design_progress=?,development_progress=?,qa_progress=?,uat_progress=?,sign_off_progress=?,deployment_progress=?,sign_off_status=?,release_status=?,budget_amount=?,budget_currency=?,market=?,customer=?,comments=?,version=version+1,updated_at=CURRENT_TIMESTAMP,updated_by=? WHERE id=? AND version=? AND record_status='ACTIVE'`).bind(...projectValues(input),actor,id,expectedVersion).run();
   if(!result.meta.changes) return {kind:"conflict" as const};
   const statements=stageKeys.map((stage)=>env.DB.prepare("UPDATE project_stage_weights SET weight=?,updated_at=CURRENT_TIMESTAMP,updated_by=? WHERE project_id=? AND stage=?").bind(input.weights[stage],actor,id,stage));
-  statements.push(env.DB.prepare(`INSERT INTO audit_logs (id,entity_type,entity_id,action,before_json,after_json,source,correlation_id) VALUES (?,?,?,?,?,?,'APPLICATION',?)`).bind(crypto.randomUUID(),"Project",id,"UPDATE",JSON.stringify(before),JSON.stringify({...input,overallProgress:calculateOverallProgress(input)}),correlationId));
+  statements.push(env.DB.prepare(`INSERT INTO audit_logs (id,entity_type,entity_id,action,before_json,after_json,actor_user_id,source,correlation_id) VALUES (?,?,?,?,?,?,?,'APPLICATION',?)`).bind(crypto.randomUUID(),"Project",id,"UPDATE",JSON.stringify(before),JSON.stringify({...input,overallProgress:calculateOverallProgress(input)}),actor,correlationId));
   await env.DB.batch(statements); return {kind:"ok" as const,project:await getProject(id)};
 }
 
@@ -109,6 +109,6 @@ export async function archiveProject(id:string,expectedVersion:number,reason:str
   const before=await getProject(id); if(!before)return{kind:"not_found" as const};
   const result=await env.DB.prepare("UPDATE projects SET record_status='ARCHIVED',archived_at=CURRENT_TIMESTAMP,version=version+1,updated_at=CURRENT_TIMESTAMP,updated_by=? WHERE id=? AND version=? AND record_status='ACTIVE'").bind(actor,id,expectedVersion).run();
   if(!result.meta.changes)return{kind:"conflict" as const};
-  await env.DB.prepare(`INSERT INTO audit_logs (id,entity_type,entity_id,action,before_json,after_json,source,correlation_id) VALUES (?,?,?,?,?,?,'APPLICATION',?)`).bind(crypto.randomUUID(),"Project",id,"ARCHIVE",JSON.stringify(before),JSON.stringify({reason}),correlationId).run();
+  await env.DB.prepare(`INSERT INTO audit_logs (id,entity_type,entity_id,action,before_json,after_json,actor_user_id,source,correlation_id) VALUES (?,?,?,?,?,?,?,'APPLICATION',?)`).bind(crypto.randomUUID(),"Project",id,"ARCHIVE",JSON.stringify(before),JSON.stringify({reason}),actor,correlationId).run();
   return{kind:"ok" as const};
 }

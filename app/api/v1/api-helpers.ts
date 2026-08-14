@@ -10,12 +10,16 @@ export async function authorizeApi(permission: PermissionCode): Promise<RequestC
   if (!user) return apiError(401, "AUTHENTICATION_REQUIRED", "Sign in is required to access this resource.", correlationId, timestamp);
   const principal = createPrincipal(user);
   if (!hasPermission(principal, permission)) return apiError(403, "FORBIDDEN", "You do not have permission to perform this action.", correlationId, timestamp);
-  return { principal, correlationId, timestamp };
+  const { ensureAuthenticatedUser } = await import("../../../db/identity");
+  const persistedUserId = await ensureAuthenticatedUser(user);
+  return { principal: { ...principal, user: { ...principal.user, userId: persistedUserId } }, correlationId, timestamp };
 }
 
-export function apiError(status: number, code: string, message: string, correlationId: string, timestamp: string, validationDetails: Record<string, string> | [] = []) {
-  return Response.json({ error: { code, message, validationDetails, correlationId, timestamp } }, { status, headers: { "cache-control": "no-store" } });
+export function apiError(status: number, code: string, message: string, correlationId: string, timestamp: string, validationDetails: Record<string, string> | [] = [], extraHeaders: HeadersInit = {}) {
+  return Response.json({ error: { code, message, validationDetails, correlationId, timestamp } }, { status, headers: { "cache-control": "no-store", "x-correlation-id": correlationId, ...Object.fromEntries(new Headers(extraHeaders)) } });
 }
+
+export const apiHeaders = (correlationId: string, extraHeaders: HeadersInit = {}) => ({ "cache-control": "no-store", "x-correlation-id": correlationId, ...Object.fromEntries(new Headers(extraHeaders)) });
 
 export function isResponse(value: RequestContext | Response): value is Response {
   return value instanceof Response;

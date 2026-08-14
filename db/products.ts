@@ -55,7 +55,7 @@ export async function createProduct(input: ProductInput, actor: string, correlat
   const values = [id, businessId, input.name, input.code, input.description, input.category, input.market, input.region, input.customerSegment, input.stage, input.startDate, input.targetLaunchDate, input.actualLaunchDate, input.status, input.priority, input.strategicObjective, input.businessValue, input.progress, input.notes, actor, actor];
   await env.DB.batch([
     env.DB.prepare(`INSERT INTO products (id,business_id,name,code,description,category,market,region,customer_segment,stage,start_date,target_launch_date,actual_launch_date,status,priority,strategic_objective,business_value,progress,notes,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(...values),
-    env.DB.prepare(`INSERT INTO audit_logs (id,entity_type,entity_id,action,after_json,source,correlation_id,occurred_at) VALUES (?,?,?,?,?,'APPLICATION',?,CURRENT_TIMESTAMP)`).bind(auditId, "Product", id, "CREATE", JSON.stringify({ businessId, name: input.name, code: input.code, stage: input.stage, status: input.status }), correlationId),
+    env.DB.prepare(`INSERT INTO audit_logs (id,entity_type,entity_id,action,after_json,actor_user_id,source,correlation_id,occurred_at) VALUES (?,?,?,?,?,?,'APPLICATION',?,CURRENT_TIMESTAMP)`).bind(auditId, "Product", id, "CREATE", JSON.stringify({ businessId, name: input.name, code: input.code, stage: input.stage, status: input.status }), actor, correlationId),
   ]);
   return getProduct(id);
 }
@@ -65,7 +65,7 @@ export async function updateProduct(id: string, input: ProductInput, expectedVer
   if (!before) return { kind: "not_found" as const };
   const result = await env.DB.prepare(`UPDATE products SET name=?,code=?,description=?,category=?,market=?,region=?,customer_segment=?,stage=?,start_date=?,target_launch_date=?,actual_launch_date=?,status=?,priority=?,strategic_objective=?,business_value=?,progress=?,notes=?,version=version+1,updated_at=CURRENT_TIMESTAMP,updated_by=? WHERE id=? AND version=? AND record_status='ACTIVE'`).bind(input.name,input.code,input.description,input.category,input.market,input.region,input.customerSegment,input.stage,input.startDate,input.targetLaunchDate,input.actualLaunchDate,input.status,input.priority,input.strategicObjective,input.businessValue,input.progress,input.notes,actor,id,expectedVersion).run();
   if (!result.meta.changes) return { kind: "conflict" as const };
-  await env.DB.prepare(`INSERT INTO audit_logs (id,entity_type,entity_id,action,before_json,after_json,source,correlation_id,occurred_at) VALUES (?,?,?,?,?,?,'APPLICATION',?,CURRENT_TIMESTAMP)`).bind(crypto.randomUUID(),"Product",id,"UPDATE",JSON.stringify(before),JSON.stringify(input),correlationId).run();
+  await env.DB.prepare(`INSERT INTO audit_logs (id,entity_type,entity_id,action,before_json,after_json,actor_user_id,source,correlation_id,occurred_at) VALUES (?,?,?,?,?,?,?,'APPLICATION',?,CURRENT_TIMESTAMP)`).bind(crypto.randomUUID(),"Product",id,"UPDATE",JSON.stringify(before),JSON.stringify(input),actor,correlationId).run();
   return { kind: "ok" as const, product: await getProduct(id) };
 }
 
@@ -74,6 +74,6 @@ export async function archiveProduct(id: string, expectedVersion: number, reason
   if (!before) return { kind: "not_found" as const };
   const result = await env.DB.prepare(`UPDATE products SET record_status='ARCHIVED',archived_at=CURRENT_TIMESTAMP,version=version+1,updated_at=CURRENT_TIMESTAMP,updated_by=? WHERE id=? AND version=? AND record_status='ACTIVE'`).bind(actor,id,expectedVersion).run();
   if (!result.meta.changes) return { kind: "conflict" as const };
-  await env.DB.prepare(`INSERT INTO audit_logs (id,entity_type,entity_id,action,before_json,after_json,source,correlation_id,occurred_at) VALUES (?,?,?,?,?,?,'APPLICATION',?,CURRENT_TIMESTAMP)`).bind(crypto.randomUUID(),"Product",id,"ARCHIVE",JSON.stringify(before),JSON.stringify({ reason }),correlationId).run();
+  await env.DB.prepare(`INSERT INTO audit_logs (id,entity_type,entity_id,action,before_json,after_json,actor_user_id,source,correlation_id,occurred_at) VALUES (?,?,?,?,?,?,?,'APPLICATION',?,CURRENT_TIMESTAMP)`).bind(crypto.randomUUID(),"Product",id,"ARCHIVE",JSON.stringify(before),JSON.stringify({ reason }),actor,correlationId).run();
   return { kind: "ok" as const };
 }

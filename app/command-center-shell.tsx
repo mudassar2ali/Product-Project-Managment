@@ -13,6 +13,7 @@ import { IdeaCenter } from "./ideas/idea-center";
 import { ExecutiveDashboard } from "./dashboard/executive-dashboard";
 import { ReportCenter } from "./reports/report-center";
 import { AuditCenter } from "./audit/audit-center";
+import { OperationalControlCenter } from "./operations/operational-control-center";
 import { BacklogCenter } from "./delivery/backlog-center";
 import { StoryCriteriaCenter } from "./delivery/story-criteria-center";
 import { DependencyCenter } from "./delivery/dependency-center";
@@ -110,8 +111,8 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
         </nav>
 
         <div className="sidebar-footer">
-          <div className="build-status"><span aria-hidden="true" /> Stage 1 build</div>
-          <p>Architecture approved</p>
+          <div className="build-status"><span aria-hidden="true" /> Stage 2 build</div>
+          <p>Operational controls active</p>
         </div>
       </aside>
 
@@ -150,20 +151,20 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
 
           <section className="page-intro">
             <div>
-              <div className="eyebrow">{["Dashboard", "Projects", "Reports", "Backlog", "Sprints", "Integrations"].includes(active) ? "STAGE 2 · AGILE DELIVERY" : "STAGE 1 · CORE MANAGEMENT MVP"}</div>
+              <div className="eyebrow">{["Dashboard", "Projects", "Reports", "Backlog", "Sprints", "Integrations", "Audit Trail"].includes(active) ? "STAGE 2 · AGILE DELIVERY" : "STAGE 1 · CORE MANAGEMENT MVP"}</div>
               <h1>{active}</h1>
               <p>{active === "Dashboard"
                 ? "A single operational view of products, projects, delivery health and management attention, extended with source-labelled Backlog and Sprint evidence."
                 : active === "Projects" ? "Manage Project records and open a source-labelled Stage 2 delivery overview."
                 : active === "Reports" ? "Controlled core and Stage 2 delivery reports generated directly from persisted evidence."
-                : active === "Audit Trail" ? "Read-only evidence of governed changes, actors, sources and correlation identifiers."
+                : active === "Audit Trail" ? "Tamper-resistant governance history plus sanitized synchronization, capacity, freshness and API control evidence."
                 : active === "Backlog" ? "Browse one source-labelled local and Azure hierarchy, then inspect delivery evidence without losing Project context."
                 : active === "Sprints" ? "Plan local commitments and inspect Azure delivery evidence with the same Project and source context as Backlog."
                 : active === "Integrations" ? "Normalize read-only Azure DevOps work-item and Team iteration evidence through governed mappings."
                 : `${active} is included in the approved Stage 1 delivery sequence.`}
               </p>
             </div>
-            <div className="step-chip">{active === "Dashboard" || active === "Projects" || active === "Reports" ? "Stage 2 · Step 11" : active === "Backlog" || active === "Sprints" ? "Stage 2 · Step 10" : active === "Integrations" ? "Stage 2 · Step 9" : `Implementation step ${current?.step ?? 1}`}</div>
+            <div className="step-chip">{active === "Audit Trail" ? "Stage 2 · Step 12" : active === "Dashboard" || active === "Projects" || active === "Reports" ? "Stage 2 · Step 11" : active === "Backlog" || active === "Sprints" ? "Stage 2 · Step 10" : active === "Integrations" ? "Stage 2 · Step 9" : `Implementation step ${current?.step ?? 1}`}</div>
           </section>
 
           {active === "Dashboard" ? (
@@ -187,7 +188,7 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
           ) : active === "Integrations" ? (
             <><IntegrationCenter canConfigure={principal.permissions.includes("integration.configure")} /><AzureSyncPanel canSync={principal.permissions.includes("integration.sync")} /></>
           ) : active === "Audit Trail" ? (
-            <AuditCenter />
+            <>{principal.permissions.includes("integration.diagnostics") && <OperationalControlCenter />}<AuditCenter /></>
           ) : <><section className="foundation-panel" aria-labelledby="foundation-title">
             <div className="foundation-copy">
               <div className="foundation-icon" aria-hidden="true">⌁</div>
