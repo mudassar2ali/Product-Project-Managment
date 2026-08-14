@@ -71,6 +71,13 @@
       "when": 1786647604571,
       "tag": "0009_bored_eternity",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1786704753584,
+      "tag": "0010_nice_rictor",
+      "breakpoints": true
     }
   ]
 }
