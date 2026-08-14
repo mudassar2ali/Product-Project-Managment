@@ -1,0 +1,1 @@
+import Link from"next/link";export default function NotFound(){return <main className="fatal-state"><section><span className="section-kicker">NOT FOUND</span><h1>This Command Center page is unavailable</h1><p>The address may be incorrect or the requested Stage 1 resource no longer exists.</p><Link className="primary-action" href="/">Return to Dashboard</Link></section></main>}
