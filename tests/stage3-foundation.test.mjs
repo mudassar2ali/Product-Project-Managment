@@ -66,9 +66,10 @@ test("RACI and feasibility contracts enforce governed outcomes", async () => {
   for (const status of ["FEASIBLE", "FEASIBLE_WITH_CONDITIONS", "NOT_FEASIBLE"]) assert.match(source, new RegExp(`"${status}"`));
 });
 
-test("unfinished Stage 3 modules remain absent from release navigation", async () => {
+test("authorized BRD module is exposed while unfinished Stage 3 modules remain absent", async () => {
   const source = await read("app/command-center-shell.tsx");
+  assert.match(source, /label: "BRD"/);
   assert.doesNotMatch(source, /label: "Requirements"/);
   assert.doesNotMatch(source, /label: "BRD \/ PRD"/);
-  assert.doesNotMatch(source, /STAGE 3 · REQUIREMENTS/);
+  assert.doesNotMatch(source, /label: "PRD"/);
 });

@@ -27,13 +27,13 @@ test("all Stage 1 and Stage 2 migrations replay without integrity loss", async (
   database.close();
 });
 
-test("final release navigation exposes completed capability only and keeps Stage 3 absent", async () => {
+test("release navigation preserves Stage 2 capability and keeps unauthorized future modules absent", async () => {
   const shell = await read("app/command-center-shell.tsx");
-  for (const featureLabel of ["Dashboard", "Products", "Projects", "Backlog", "Sprints", "Milestones", "Ideas", "RAID", "Reports", "Integrations", "Audit Trail"]) assert.match(shell, new RegExp(`label: "${featureLabel}"`));
-  for (const deferred of ["Administration", "BRD", "PRD", "Requirements", "Market Intelligence", "TAM", "SAM", "SOM", "Financial", "Scorecards", "Release Management", "AI Assistant"]) assert.doesNotMatch(shell, new RegExp(`label: "${deferred}"`));
+  for (const featureLabel of ["Dashboard", "Products", "Projects", "Backlog", "Sprints", "Milestones", "Ideas", "RAID", "Reports", "Integrations", "Audit Trail", "BRD"]) assert.match(shell, new RegExp(`label: "${featureLabel}"`));
+  for (const deferred of ["Administration", "PRD", "Requirements", "Market Intelligence", "TAM", "SAM", "SOM", "Financial", "Scorecards", "Release Management", "AI Assistant"]) assert.doesNotMatch(shell, new RegExp(`label: "${deferred}"`));
   for (const stale of ["Search and notifications are scheduled", "The command center shell is ready", "1 of 18 in progress"]) assert.doesNotMatch(shell, new RegExp(stale));
-  assert.match(shell, /Stage 2 release/);
-  assert.match(shell, /Azure certification pending/);
+  assert.match(shell, /Stage 3 build/);
+  assert.match(shell, /BRD authoring active/);
 });
 
 test("Stage 2 API surface covers Backlog Story dependency Sprint metric Azure and operations contracts", async () => {

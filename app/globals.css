@@ -184,4 +184,38 @@ h1 { margin: 8px 0 8px; font-family: Georgia, 'Times New Roman', serif; font-siz
 
 @media (prefers-reduced-motion: reduce) { *,*::before,*::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }
 
+.brd-module { background: var(--surface); border: 1px solid var(--line); border-radius: 9px; box-shadow: 0 5px 22px rgba(31,62,47,.045); overflow: hidden; }
+.brd-error { margin: 12px 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.clickable-row { cursor: pointer; }
+.clickable-row:hover { background: #f8fbf9; }
+.table-link { display: block; border: 0; padding: 0; color: #193d2c; background: transparent; cursor: pointer; font: inherit; font-weight: 700; text-align: left; }
+.brd-workspace { min-height: 620px; }
+.brd-document-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding: 22px; border-bottom: 1px solid var(--line); background: linear-gradient(135deg,#fbfdfb,#f5f9f6); }
+.brd-document-header h3 { margin: 7px 0 6px; color: #18382a; font-family: Georgia,'Times New Roman',serif; font-size: 25px; font-weight: 500; }
+.brd-document-header p { max-width: 760px; margin: 0; color: #627168; font-size: 11px; line-height: 1.6; }
+.brd-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 12px; color: #53665b; font-size: 9.5px; }
+.brd-header-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.brd-progress { display: grid; grid-template-columns: 170px 1fr; align-items: center; gap: 18px; padding: 12px 22px; border-bottom: 1px solid var(--soft-line); background: white; }
+.brd-progress > div { display: flex; align-items: baseline; gap: 7px; }.brd-progress strong { color: #1d4934; font-size: 15px; }.brd-progress div span { color: #708078; font-size: 9px; }
+.brd-progress > span { height: 7px; overflow: hidden; border-radius: 99px; background: #e6eee9; }.brd-progress > span i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#1b7756,#77a98d); }
+.brd-authoring-grid { display: grid; grid-template-columns: 265px minmax(0,1fr); min-height: 520px; }
+.brd-section-nav { max-height: 680px; overflow-y: auto; border-right: 1px solid var(--line); background: #f9fbfa; }
+.brd-section-nav button { width: 100%; display: grid; grid-template-columns: 28px 1fr 22px; align-items: center; gap: 7px; padding: 10px 12px; border: 0; border-bottom: 1px solid #e8eeea; color: #5f7067; background: transparent; cursor: pointer; text-align: left; }
+.brd-section-nav button:hover,.brd-section-nav button.active { color: #174c35; background: white; box-shadow: inset 3px 0 #187451; }.brd-section-nav button > span { font-size: 8px; color: #87958e; }.brd-section-nav button strong { font-size: 9.5px; font-weight: 620; }.brd-section-nav button i { width: 19px; height: 19px; display: grid; place-items: center; border-radius: 50%; font-size: 9px; font-style: normal; }
+.section-state.state-complete { color: #176342; background: #dff1e7; }.section-state.state-in_progress { color: #8b6517; background: #fff0c9; }.section-state.state-empty { color: #75827b; background: #e9eeeb; }
+.brd-section-editor { min-width: 0; padding: 22px; }
+.brd-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }.brd-section-heading h3 { margin: 5px 0 0; color: #1c3e2e; font-family: Georgia,'Times New Roman',serif; font-size: 23px; font-weight: 500; }
+.brd-section-editor .field textarea { min-height: 310px; line-height: 1.65; }
+.brd-section-controls { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 9px; color: #65766c; font-size: 9px; }.brd-section-controls label { display: flex; align-items: center; gap: 7px; cursor: pointer; }
+.brd-locked-content { min-height: 190px; padding: 18px; border: 1px solid #dce6df; border-radius: 7px; background: #fbfcfb; }.brd-locked-content > span { color: #176342; font-size: 8.5px; font-weight: 750; text-transform: uppercase; letter-spacing: .08em; }.brd-locked-content p { margin: 13px 0 0; color: #394c41; white-space: pre-wrap; font-size: 11px; line-height: 1.7; }
+.brd-history { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line); }.brd-history h4 { margin: 0 0 11px; color: #345044; font-size: 10px; text-transform: uppercase; letter-spacing: .07em; }.brd-history > div { display: grid; grid-template-columns: 130px 120px 1fr auto; gap: 10px; align-items: start; padding: 9px 0; border-top: 1px solid var(--soft-line); font-size: 9px; }.brd-history > div strong { color: #294b3a; }.brd-history > div span { color: #687970; }.brd-history > div p { margin: 0; color: #66776d; }.brd-history code { color: #66776d; font-size: 8px; }.brd-history .revision-create { display: flex; grid-template-columns: none; justify-content: flex-end; align-items: end; }.revision-create .field { width: min(520px,100%); }
+.brd-dialog { width: min(720px,100%); }
+
+@media (max-width: 900px) {
+  .brd-document-header { flex-direction: column; }.brd-header-actions { justify-content: flex-start; }.brd-authoring-grid { grid-template-columns: 1fr; }.brd-section-nav { display: flex; max-height: none; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); }.brd-section-nav button { min-width: 190px; border-right: 1px solid #e8eeea; border-bottom: 0; }.brd-progress { grid-template-columns: 1fr; }.brd-history > div { grid-template-columns: 110px 1fr; }.brd-history > div p,.brd-history code { grid-column: 1 / -1; }
+}
+@media (max-width: 620px) {
+  .brd-document-header,.brd-section-editor { padding: 16px; }.brd-section-editor .field textarea { min-height: 240px; }.brd-section-controls { align-items: flex-start; flex-direction: column; }.brd-meta { align-items: flex-start; flex-direction: column; gap: 5px; }
+}
+
 .fatal-state { min-height:100vh; display:grid; place-items:center; padding:24px; background:#f4f7f5; }.fatal-state section { max-width:520px; padding:32px; border:1px solid var(--line); border-radius:10px; background:white; box-shadow:0 18px 50px #18312418; }.fatal-state h1 { margin:10px 0; font:500 28px Georgia,serif; }.fatal-state p { color:#66766d; line-height:1.6; }.fatal-state code { display:block; margin:15px 0; padding:10px; border-radius:5px; background:#f1f4f2; color:#526158; font-size:10px; overflow-wrap:anywhere; }.fatal-state a { display:inline-block; margin-top:10px; }
