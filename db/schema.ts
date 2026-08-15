@@ -312,3 +312,83 @@ export const operationalRateLimits = sqliteTable("operational_rate_limits", {
 export const operationalEvents = sqliteTable("operational_events", {
   id:text("id").primaryKey(),operation:text("operation").notNull(),outcome:text("outcome").notNull(),durationMs:integer("duration_ms").notNull().default(0),statusCode:integer("status_code").notNull(),entityType:text("entity_type"),entityId:text("entity_id"),actorUserId:text("actor_user_id").references(()=>users.id,{onDelete:"set null"}),correlationId:text("correlation_id").notNull(),detailsJson:text("details_json").notNull().default("{}"),occurredAt:text("occurred_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 },t=>[index("idx_operational_events_operation_time").on(t.operation,t.occurredAt),index("idx_operational_events_outcome_time").on(t.outcome,t.occurredAt),index("idx_operational_events_correlation").on(t.correlationId),index("idx_operational_events_actor_time").on(t.actorUserId,t.occurredAt),check("ck_operational_event_outcome",sql`${t.outcome} IN ('SUCCESS','REJECTED','ERROR','RATE_LIMITED')`),check("ck_operational_event_values",sql`${t.durationMs}>=0 AND ${t.statusCode} BETWEEN 100 AND 599`)]);
+
+export const governanceDocuments = sqliteTable("governance_documents", {
+  id: text("id").primaryKey(),
+  businessId: text("business_id").notNull(),
+  documentType: text("document_type").notNull(),
+  productId: text("product_id").notNull().references(() => products.id, { onDelete: "restrict" }),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "restrict" }),
+  title: text("title").notNull(),
+  ownerUserId: text("owner_user_id").references(() => users.id, { onDelete: "set null" }),
+  purpose: text("purpose").notNull().default(""),
+  recordStatus: text("record_status").notNull().default("ACTIVE"),
+  archivedAt: text("archived_at"),
+  version: integer("version").notNull().default(1),
+  ...auditColumns,
+}, (table) => [
+  uniqueIndex("uq_governance_documents_business_id").on(table.businessId),
+  index("idx_governance_documents_product_type").on(table.productId, table.documentType, table.recordStatus),
+  index("idx_governance_documents_project_type").on(table.projectId, table.documentType, table.recordStatus),
+  index("idx_governance_documents_owner_status").on(table.ownerUserId, table.recordStatus),
+  check("ck_governance_document_type", sql`${table.documentType} IN ('BRD','PRD')`),
+  check("ck_governance_document_status", sql`${table.recordStatus} IN ('ACTIVE','ARCHIVED')`),
+  check("ck_governance_document_fields", sql`length(trim(${table.businessId})) BETWEEN 1 AND 32 AND length(trim(${table.title})) BETWEEN 1 AND 240 AND length(${table.purpose})<=2000 AND ${table.version}>0`),
+  check("ck_governance_document_archive", sql`(${table.recordStatus}='ACTIVE' AND ${table.archivedAt} IS NULL) OR (${table.recordStatus}='ARCHIVED' AND ${table.archivedAt} IS NOT NULL)`),
+]);
+
+export const governanceDocumentVersions = sqliteTable("governance_document_versions", {
+  id: text("id").primaryKey(),
+  documentId: text("document_id").notNull().references(() => governanceDocuments.id, { onDelete: "restrict" }),
+  versionLabel: text("version_label").notNull(),
+  majorVersion: integer("major_version").notNull().default(0),
+  minorVersion: integer("minor_version").notNull().default(1),
+  lifecycleStatus: text("lifecycle_status").notNull().default("DRAFT"),
+  supersedesVersionId: text("supersedes_version_id").references((): AnySQLiteColumn => governanceDocumentVersions.id, { onDelete: "restrict" }),
+  contentHash: text("content_hash"),
+  changeSummary: text("change_summary").notNull().default(""),
+  submittedAt: text("submitted_at"),
+  approvedAt: text("approved_at"),
+  lockedAt: text("locked_at"),
+  version: integer("version").notNull().default(1),
+  ...auditColumns,
+}, (table) => [
+  uniqueIndex("uq_governance_versions_label").on(table.documentId, table.versionLabel),
+  uniqueIndex("uq_governance_versions_one_draft").on(table.documentId).where(sql`${table.lifecycleStatus}='DRAFT'`),
+  uniqueIndex("uq_governance_versions_one_current_approved").on(table.documentId).where(sql`${table.lifecycleStatus} IN ('APPROVED','APPROVED_WITH_CONDITIONS')`),
+  index("idx_governance_versions_document_status").on(table.documentId, table.lifecycleStatus, table.majorVersion, table.minorVersion),
+  index("idx_governance_versions_submitted_status").on(table.submittedAt, table.lifecycleStatus),
+  index("idx_governance_versions_supersedes").on(table.supersedesVersionId),
+  check("ck_governance_version_status", sql`${table.lifecycleStatus} IN ('DRAFT','IN_REVIEW','APPROVED','APPROVED_WITH_CONDITIONS','REJECTED','SUPERSEDED','RETIRED')`),
+  check("ck_governance_version_numbers", sql`${table.majorVersion}>=0 AND ${table.minorVersion}>=0 AND ${table.version}>0`),
+  check("ck_governance_version_label", sql`length(trim(${table.versionLabel})) BETWEEN 1 AND 32`),
+  check("ck_governance_version_summary", sql`length(${table.changeSummary})<=2000`),
+  check("ck_governance_version_hash", sql`${table.contentHash} IS NULL OR (length(${table.contentHash})=64 AND lower(${table.contentHash}) NOT GLOB '*[^0-9a-f]*')`),
+  check("ck_governance_version_lock", sql`
+    (${table.lifecycleStatus}='DRAFT' AND ${table.contentHash} IS NULL AND ${table.submittedAt} IS NULL AND ${table.approvedAt} IS NULL AND ${table.lockedAt} IS NULL)
+    OR (${table.lifecycleStatus}='IN_REVIEW' AND ${table.contentHash} IS NOT NULL AND ${table.submittedAt} IS NOT NULL AND ${table.approvedAt} IS NULL AND ${table.lockedAt} IS NOT NULL)
+    OR (${table.lifecycleStatus} IN ('APPROVED','APPROVED_WITH_CONDITIONS','SUPERSEDED','RETIRED') AND ${table.contentHash} IS NOT NULL AND ${table.submittedAt} IS NOT NULL AND ${table.approvedAt} IS NOT NULL AND ${table.lockedAt} IS NOT NULL)
+    OR (${table.lifecycleStatus}='REJECTED' AND ${table.contentHash} IS NOT NULL AND ${table.submittedAt} IS NOT NULL AND ${table.approvedAt} IS NULL AND ${table.lockedAt} IS NOT NULL)
+  `),
+  check("ck_governance_version_not_self", sql`${table.supersedesVersionId} IS NULL OR ${table.supersedesVersionId}<>${table.id}`),
+]);
+
+export const governanceDocumentSections = sqliteTable("governance_document_sections", {
+  id: text("id").primaryKey(),
+  documentVersionId: text("document_version_id").notNull().references(() => governanceDocumentVersions.id, { onDelete: "cascade" }),
+  sectionKey: text("section_key").notNull(),
+  heading: text("heading").notNull(),
+  sequence: integer("sequence").notNull(),
+  contentText: text("content_text").notNull().default(""),
+  required: integer("required", { mode: "boolean" }).notNull().default(true),
+  completionStatus: text("completion_status").notNull().default("EMPTY"),
+  version: integer("version").notNull().default(1),
+  ...auditColumns,
+}, (table) => [
+  uniqueIndex("uq_governance_sections_key").on(table.documentVersionId, table.sectionKey),
+  uniqueIndex("uq_governance_sections_sequence").on(table.documentVersionId, table.sequence),
+  index("idx_governance_sections_version_completion").on(table.documentVersionId, table.completionStatus, table.required),
+  check("ck_governance_section_key", sql`${table.sectionKey} IN ('DOCUMENT_INFORMATION','EXECUTIVE_SUMMARY','BUSINESS_CONTEXT','PROBLEM_STATEMENT','BUSINESS_OBJECTIVES','BUSINESS_REQUIREMENTS','SCOPE','OUT_OF_SCOPE','STAKEHOLDERS','CURRENT_STATE','FUTURE_STATE','BUSINESS_PROCESSES','FUNCTIONAL_REQUIREMENTS','NON_FUNCTIONAL_REQUIREMENTS','BUSINESS_RULES','DEPENDENCIES','ASSUMPTIONS','RISKS','COMPLIANCE_REQUIREMENTS','KPIS','SUCCESS_METRICS','USER_STORIES','ACCEPTANCE_CRITERIA','UAT_CRITERIA','SIGN_OFF','PRODUCT_OVERVIEW','PROBLEM','OPPORTUNITY','TARGET_USERS','PERSONAS','USE_CASES','OBJECTIVES','FEATURES','UX_REQUIREMENTS','ANALYTICS_REQUIREMENTS','RELEASE_STRATEGY')`),
+  check("ck_governance_section_fields", sql`length(trim(${table.heading})) BETWEEN 1 AND 160 AND ${table.sequence}>0 AND length(${table.contentText})<=100000 AND ${table.version}>0`),
+  check("ck_governance_section_completion", sql`${table.completionStatus} IN ('EMPTY','IN_PROGRESS','COMPLETE') AND (${table.completionStatus}<>'COMPLETE' OR length(trim(${table.contentText}))>0) AND (${table.completionStatus}<>'EMPTY' OR length(trim(${table.contentText}))=0)`),
+]);
