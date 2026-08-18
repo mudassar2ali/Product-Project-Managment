@@ -10,15 +10,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   catch { return apiError(400, "INVALID_JSON", "Request body must be valid JSON.", context.correlationId, context.timestamp); }
   const source = body && typeof body === "object" ? body as Record<string, unknown> : {};
   const version = Number(source.version);
-  if (!Number.isInteger(version) || version < 1) return apiError(422, "VERSION_REQUIRED", "Refresh the BRD and try again.", context.correlationId, context.timestamp, { version: "A current version is required." });
+  if (!Number.isInteger(version) || version < 1) return apiError(422, "VERSION_REQUIRED", "Refresh the document and try again.", context.correlationId, context.timestamp, { version: "A current version is required." });
   const { id } = await params;
-  const { submitBrdVersion } = await import("../../../../../../db/governance-documents");
+  const { submitGovernanceVersion } = await import("../../../../../../db/governance-documents");
   try {
-    const result = await submitBrdVersion(id, version, context.principal.user.userId, context.correlationId);
-    if (result.kind === "not_found") return apiError(404, "BRD_VERSION_NOT_FOUND", "BRD version was not found.", context.correlationId, context.timestamp);
-    if (result.kind === "locked") return apiError(409, "GOVERNANCE_VERSION_LOCKED", "This BRD version is already locked.", context.correlationId, context.timestamp);
-    if (result.kind === "conflict") return apiError(409, "VERSION_CONFLICT", "This BRD changed after you opened it. Refresh and try again.", context.correlationId, context.timestamp);
-    if (result.kind === "incomplete") return apiError(422, "BRD_INCOMPLETE", "Complete every required BRD section before review.", context.correlationId, context.timestamp, { sections: result.sections.join(", ") });
+    const result = await submitGovernanceVersion(id, version, context.principal.user.userId, context.correlationId);
+    if (result.kind === "not_found") return apiError(404, "DOCUMENT_VERSION_NOT_FOUND", "Document version was not found.", context.correlationId, context.timestamp);
+    if (result.kind === "locked") return apiError(409, "GOVERNANCE_VERSION_LOCKED", "This document version is already locked.", context.correlationId, context.timestamp);
+    if (result.kind === "conflict") return apiError(409, "VERSION_CONFLICT", "This document changed after you opened it. Refresh and try again.", context.correlationId, context.timestamp);
+    if (result.kind === "incomplete") return apiError(422, "DOCUMENT_INCOMPLETE", "Complete every required document section before review.", context.correlationId, context.timestamp, { sections: result.sections.join(", ") });
     return Response.json({ data: result.workspace, meta: { correlationId: context.correlationId, timestamp: context.timestamp } }, { headers: apiHeaders(context.correlationId) });
-  } catch { return apiError(500, "BRD_SUBMIT_FAILED", "The BRD could not be submitted for review.", context.correlationId, context.timestamp); }
+  } catch { return apiError(500, "DOCUMENT_SUBMIT_FAILED", "The document could not be submitted for review.", context.correlationId, context.timestamp); }
 }
