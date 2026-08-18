@@ -179,6 +179,28 @@ export function deriveRequirementDeliveryStatus(
   return anyActive ? "IN_PROGRESS" : "PLANNED";
 }
 
+export const evidenceFreshnessStatuses = ["NOT_APPLICABLE", "FRESH", "AGING", "STALE"] as const;
+export type EvidenceFreshnessStatus = (typeof evidenceFreshnessStatuses)[number];
+
+const evidenceFreshWindowDays = 90;
+const evidenceAgingWindowDays = 180;
+
+export function deriveEvidenceFreshness(
+  evidenceStatus: (typeof verificationEvidenceStatuses)[number],
+  observedAt: string | null,
+  nowIso: string,
+): EvidenceFreshnessStatus {
+  if (evidenceStatus === "NOT_AVAILABLE" || evidenceStatus === "PENDING") return "NOT_APPLICABLE";
+  if (!observedAt) return "STALE";
+  const observedMs = Date.parse(observedAt);
+  const nowMs = Date.parse(nowIso);
+  if (Number.isNaN(observedMs) || Number.isNaN(nowMs)) return "STALE";
+  const ageDays = (nowMs - observedMs) / 86_400_000;
+  if (ageDays <= evidenceFreshWindowDays) return "FRESH";
+  if (ageDays <= evidenceAgingWindowDays) return "AGING";
+  return "STALE";
+}
+
 export function requirementCoverageEvidence(
   numerator: number,
   denominator: number,

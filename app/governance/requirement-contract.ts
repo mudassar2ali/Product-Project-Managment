@@ -1,7 +1,19 @@
-import { requirementBacklogLinkTypes, requirementRelationshipTypes, requirementTypes, type RequirementType } from "./stage3-contract";
+import { requirementBacklogLinkTypes, requirementRelationshipTypes, requirementTypes, verificationEvidenceStatuses, verificationEvidenceTypes, type RequirementType } from "./stage3-contract";
 
 export type RequirementRelationshipType = (typeof requirementRelationshipTypes)[number];
 export type RequirementBacklogLinkType = (typeof requirementBacklogLinkTypes)[number];
+export type RequirementEvidenceType = (typeof verificationEvidenceTypes)[number];
+export type RequirementEvidenceStatus = (typeof verificationEvidenceStatuses)[number];
+
+export type RequirementEvidenceInput = {
+  evidenceType: RequirementEvidenceType;
+  sourceSystem: string;
+  externalReference: string;
+  sourceUrl: string | null;
+  evidenceStatus: RequirementEvidenceStatus;
+  result: string;
+  observedAt: string | null;
+};
 
 export type RequirementRelationshipInput = {
   targetRequirementId: string;
@@ -126,6 +138,36 @@ export function validateRequirementBacklogLinkInput(body: unknown): Result<Requi
   } else if (value.coveragePercentage !== null) {
     details.coveragePercentage = "Coverage percentage only applies to partial implementation.";
   }
+  return Object.keys(details).length ? { ok: false, details } : { ok: true, value };
+}
+
+export function validateRequirementEvidenceInput(body: unknown): Result<RequirementEvidenceInput> {
+  const source = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  const requestedType = text(source.evidenceType).toUpperCase();
+  const evidenceType = (verificationEvidenceTypes as readonly string[]).includes(requestedType) ? (requestedType as RequirementEvidenceType) : null;
+  const requestedStatus = text(source.evidenceStatus).toUpperCase();
+  const evidenceStatus = (verificationEvidenceStatuses as readonly string[]).includes(requestedStatus) ? (requestedStatus as RequirementEvidenceStatus) : null;
+  const rawUrl = text(source.sourceUrl);
+  const observedAtRaw = text(source.observedAt);
+  const value: RequirementEvidenceInput = {
+    evidenceType: evidenceType ?? ("QA" as RequirementEvidenceType),
+    sourceSystem: text(source.sourceSystem),
+    externalReference: text(source.externalReference),
+    sourceUrl: rawUrl || null,
+    evidenceStatus: evidenceStatus ?? "NOT_AVAILABLE",
+    result: text(source.result),
+    observedAt: observedAtRaw && !Number.isNaN(Date.parse(observedAtRaw)) ? new Date(observedAtRaw).toISOString() : null,
+  };
+  const details: Record<string, string> = {};
+  if (!evidenceType) details.evidenceType = "Select a valid evidence type.";
+  if (!evidenceStatus) details.evidenceStatus = "Select a valid evidence status.";
+  if (value.sourceSystem.length < 1 || value.sourceSystem.length > 120) details.sourceSystem = "Provide the source system (1–120 characters).";
+  if (value.externalReference.length < 1 || value.externalReference.length > 160) details.externalReference = "Provide the external reference (1–160 characters).";
+  if (rawUrl && (rawUrl.length > 500 || !/^https?:\/\//.test(rawUrl))) details.sourceUrl = "Provide a valid http(s) URL.";
+  if (value.result.length > 2_000) details.result = "Result cannot exceed 2,000 characters.";
+  const needsObservedAt = evidenceStatus === "PASSED" || evidenceStatus === "FAILED" || evidenceStatus === "CONDITIONAL" || evidenceStatus === "STALE";
+  if (needsObservedAt && !value.observedAt) details.observedAt = "Provide the date this evidence was observed.";
+  if (!needsObservedAt && value.observedAt) details.observedAt = "Only Passed, Failed, Conditional or Stale evidence records an observed date.";
   return Object.keys(details).length ? { ok: false, details } : { ok: true, value };
 }
 

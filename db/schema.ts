@@ -488,3 +488,29 @@ export const requirementBacklogLinks = sqliteTable("requirement_backlog_links", 
     OR (${table.linkType}<>'PARTIALLY_IMPLEMENTS' AND ${table.coveragePercentage} IS NULL)
   `),
 ]);
+
+export const requirementEvidenceReferences = sqliteTable("requirement_evidence_references", {
+  id: text("id").primaryKey(),
+  requirementId: text("requirement_id").notNull().references(() => requirements.id, { onDelete: "restrict" }),
+  evidenceType: text("evidence_type").notNull(),
+  sourceSystem: text("source_system").notNull(),
+  externalReference: text("external_reference").notNull(),
+  sourceUrl: text("source_url"),
+  evidenceStatus: text("evidence_status").notNull().default("NOT_AVAILABLE"),
+  result: text("result").notNull().default(""),
+  observedAt: text("observed_at"),
+  version: integer("version").notNull().default(1),
+  ...auditColumns,
+}, (table) => [
+  uniqueIndex("uq_requirement_evidence_reference").on(table.requirementId, table.evidenceType, table.externalReference),
+  index("idx_requirement_evidence_requirement_type").on(table.requirementId, table.evidenceType, table.evidenceStatus),
+  index("idx_requirement_evidence_observed").on(table.observedAt),
+  check("ck_requirement_evidence_type", sql`${table.evidenceType} IN ('QA','UAT','RELEASE')`),
+  check("ck_requirement_evidence_status", sql`${table.evidenceStatus} IN ('NOT_AVAILABLE','PENDING','PASSED','FAILED','CONDITIONAL','STALE')`),
+  check("ck_requirement_evidence_fields", sql`length(trim(${table.sourceSystem})) BETWEEN 1 AND 120 AND length(trim(${table.externalReference})) BETWEEN 1 AND 160 AND length(${table.result})<=2000 AND ${table.version}>0`),
+  check("ck_requirement_evidence_url", sql`${table.sourceUrl} IS NULL OR (length(${table.sourceUrl})<=500 AND (${table.sourceUrl} LIKE 'https://%' OR ${table.sourceUrl} LIKE 'http://%'))`),
+  check("ck_requirement_evidence_observed_consistency", sql`
+    (${table.evidenceStatus} IN ('NOT_AVAILABLE','PENDING') AND ${table.observedAt} IS NULL)
+    OR (${table.evidenceStatus} IN ('PASSED','FAILED','CONDITIONAL','STALE') AND ${table.observedAt} IS NOT NULL)
+  `),
+]);

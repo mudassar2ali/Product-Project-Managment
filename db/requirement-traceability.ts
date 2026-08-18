@@ -1,11 +1,15 @@
 import { env } from "cloudflare:workers";
-import { deriveRequirementDeliveryStatus } from "../app/governance/stage3-contract";
-import type { RequirementBacklogLinkInput, RequirementRelationshipInput } from "../app/governance/requirement-contract";
+import { deriveEvidenceFreshness, deriveRequirementDeliveryStatus } from "../app/governance/stage3-contract";
+import type { RequirementBacklogLinkInput, RequirementEvidenceInput, RequirementRelationshipInput } from "../app/governance/requirement-contract";
 
 const cycleCheckedTypes = new Set(["DERIVES_FROM", "DEPENDS_ON"]);
 
 type RequirementScopeRow = { id: string; productId: string; projectId: string | null; recordStatus: string };
 type BacklogItemScopeRow = { id: string; projectId: string; origin: string; status: string; deliveryState: string; sourceMissingAt: string | null; recordStatus: string };
+type EvidenceRow = {
+  id: string; evidenceType: string; sourceSystem: string; externalReference: string; sourceUrl: string | null;
+  evidenceStatus: string; result: string; observedAt: string | null; version: number; updatedAt: string;
+};
 
 async function loadRequirementScope(id: string) {
   return env.DB.prepare("SELECT id,product_id productId,project_id projectId,record_status recordStatus FROM requirements WHERE id=?").bind(id).first<RequirementScopeRow>();
@@ -14,7 +18,7 @@ async function loadRequirementScope(id: string) {
 export async function getRequirementTraceability(requirementId: string) {
   const requirement = await loadRequirementScope(requirementId);
   if (!requirement || requirement.recordStatus !== "ACTIVE") return { kind: "not_found" as const };
-  const [outgoing, incoming, backlogLinks] = await Promise.all([
+  const [outgoing, incoming, backlogLinks, evidence] = await Promise.all([
     env.DB.prepare(`
       SELECT r.id,r.relationship_type relationshipType,r.rationale,r.version,
         t.id targetRequirementId,t.business_id targetBusinessId,rev.title targetTitle
@@ -38,6 +42,11 @@ export async function getRequirementTraceability(requirementId: string) {
       JOIN backlog_items b ON b.id=l.backlog_item_id
       WHERE l.requirement_id=? ORDER BY l.created_at
     `).bind(requirementId).all(),
+    env.DB.prepare(`
+      SELECT id,evidence_type evidenceType,source_system sourceSystem,external_reference externalReference,source_url sourceUrl,
+        evidence_status evidenceStatus,result,observed_at observedAt,version,updated_at updatedAt
+      FROM requirement_evidence_references WHERE requirement_id=? ORDER BY created_at DESC
+    `).bind(requirementId).all<EvidenceRow>(),
   ]);
   const deliveryStatus = deriveRequirementDeliveryStatus(backlogLinks.results.map((link) => ({
     linkType: link.linkType,
@@ -46,7 +55,12 @@ export async function getRequirementTraceability(requirementId: string) {
     deliveryState: link.deliveryState,
     sourceMissingAt: link.sourceMissingAt,
   })));
-  return { kind: "ok" as const, requirement, outgoing: outgoing.results, incoming: incoming.results, backlogLinks: backlogLinks.results, deliveryStatus };
+  const nowIso = new Date().toISOString();
+  const evidenceWithFreshness = evidence.results.map((record) => ({
+    ...record,
+    freshness: deriveEvidenceFreshness(record.evidenceStatus as Parameters<typeof deriveEvidenceFreshness>[0], record.observedAt, nowIso),
+  }));
+  return { kind: "ok" as const, requirement, outgoing: outgoing.results, incoming: incoming.results, backlogLinks: backlogLinks.results, evidence: evidenceWithFreshness, deliveryStatus };
 }
 
 export async function addRequirementRelationship(sourceId: string, input: RequirementRelationshipInput, actor: string, correlationId: string) {
@@ -113,4 +127,36 @@ export async function removeRequirementBacklogLink(requirementId: string, linkId
     env.DB.prepare("INSERT INTO audit_logs(id,entity_type,entity_id,action,before_json,actor_user_id,source,correlation_id,occurred_at) VALUES(?,?,?,?,?,?,'APPLICATION',?,CURRENT_TIMESTAMP)").bind(crypto.randomUUID(), "Requirement", requirementId, "BACKLOG_LINK_REMOVE", JSON.stringify(link), actor, correlationId),
   ]);
   return { kind: "ok" as const };
+}
+
+export async function addRequirementEvidence(requirementId: string, input: RequirementEvidenceInput, actor: string, correlationId: string) {
+  const requirement = await loadRequirementScope(requirementId);
+  if (!requirement || requirement.recordStatus !== "ACTIVE") return { kind: "not_found" as const };
+  const duplicate = await env.DB
+    .prepare("SELECT id FROM requirement_evidence_references WHERE requirement_id=? AND evidence_type=? AND external_reference=?")
+    .bind(requirementId, input.evidenceType, input.externalReference)
+    .first();
+  if (duplicate) return { kind: "duplicate" as const };
+  const id = crypto.randomUUID();
+  await env.DB.batch([
+    env.DB
+      .prepare(
+        "INSERT INTO requirement_evidence_references(id,requirement_id,evidence_type,source_system,external_reference,source_url,evidence_status,result,observed_at,created_by,updated_by) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+      )
+      .bind(id, requirementId, input.evidenceType, input.sourceSystem, input.externalReference, input.sourceUrl, input.evidenceStatus, input.result, input.observedAt, actor, actor),
+    env.DB
+      .prepare(
+        "INSERT INTO audit_logs(id,entity_type,entity_id,action,after_json,actor_user_id,source,correlation_id,occurred_at) VALUES(?,?,?,?,?,?,'APPLICATION',?,CURRENT_TIMESTAMP)",
+      )
+      .bind(
+        crypto.randomUUID(),
+        "Requirement",
+        requirementId,
+        "EVIDENCE_ADD",
+        JSON.stringify({ id, evidenceType: input.evidenceType, sourceSystem: input.sourceSystem, externalReference: input.externalReference, evidenceStatus: input.evidenceStatus }),
+        actor,
+        correlationId,
+      ),
+  ]);
+  return { kind: "ok" as const, id };
 }
