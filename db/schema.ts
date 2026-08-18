@@ -392,3 +392,62 @@ export const governanceDocumentSections = sqliteTable("governance_document_secti
   check("ck_governance_section_fields", sql`length(trim(${table.heading})) BETWEEN 1 AND 160 AND ${table.sequence}>0 AND length(${table.contentText})<=100000 AND ${table.version}>0`),
   check("ck_governance_section_completion", sql`${table.completionStatus} IN ('EMPTY','IN_PROGRESS','COMPLETE') AND (${table.completionStatus}<>'COMPLETE' OR length(trim(${table.contentText}))>0) AND (${table.completionStatus}<>'EMPTY' OR length(trim(${table.contentText}))=0)`),
 ]);
+
+export const requirements = sqliteTable("requirements", {
+  id: text("id").primaryKey(),
+  businessId: text("business_id").notNull(),
+  requirementType: text("requirement_type").notNull(),
+  productId: text("product_id").notNull().references(() => products.id, { onDelete: "restrict" }),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "restrict" }),
+  documentId: text("document_id").references(() => governanceDocuments.id, { onDelete: "restrict" }),
+  ownerUserId: text("owner_user_id").references(() => users.id, { onDelete: "set null" }),
+  recordStatus: text("record_status").notNull().default("ACTIVE"),
+  archivedAt: text("archived_at"),
+  version: integer("version").notNull().default(1),
+  ...auditColumns,
+}, (table) => [
+  uniqueIndex("uq_requirements_business_id").on(table.businessId),
+  index("idx_requirements_product_type_status").on(table.productId, table.requirementType, table.recordStatus),
+  index("idx_requirements_project_type_status").on(table.projectId, table.requirementType, table.recordStatus),
+  index("idx_requirements_document").on(table.documentId),
+  index("idx_requirements_owner_status").on(table.ownerUserId, table.recordStatus),
+  check("ck_requirement_type", sql`${table.requirementType} IN ('BUSINESS','PRODUCT','FUNCTIONAL','NON_FUNCTIONAL','COMPLIANCE','BUSINESS_RULE','UX','ANALYTICS','UAT')`),
+  check("ck_requirement_status", sql`${table.recordStatus} IN ('ACTIVE','ARCHIVED')`),
+  check("ck_requirement_fields", sql`length(trim(${table.businessId})) BETWEEN 1 AND 32 AND ${table.version}>0`),
+  check("ck_requirement_archive", sql`(${table.recordStatus}='ACTIVE' AND ${table.archivedAt} IS NULL) OR (${table.recordStatus}='ARCHIVED' AND ${table.archivedAt} IS NOT NULL)`),
+]);
+
+export const requirementRevisions = sqliteTable("requirement_revisions", {
+  id: text("id").primaryKey(),
+  requirementId: text("requirement_id").notNull().references(() => requirements.id, { onDelete: "restrict" }),
+  revisionNumber: integer("revision_number").notNull().default(1),
+  documentVersionId: text("document_version_id").references(() => governanceDocumentVersions.id, { onDelete: "restrict" }),
+  title: text("title").notNull(),
+  statement: text("statement").notNull().default(""),
+  rationale: text("rationale").notNull().default(""),
+  priority: text("priority").notNull().default("MEDIUM"),
+  verificationMethod: text("verification_method").notNull().default(""),
+  governanceStatus: text("governance_status").notNull().default("DRAFT"),
+  contentHash: text("content_hash"),
+  submittedAt: text("submitted_at"),
+  approvedAt: text("approved_at"),
+  version: integer("version").notNull().default(1),
+  ...auditColumns,
+}, (table) => [
+  uniqueIndex("uq_requirement_revisions_number").on(table.requirementId, table.revisionNumber),
+  uniqueIndex("uq_requirement_revisions_one_draft").on(table.requirementId).where(sql`${table.governanceStatus}='DRAFT'`),
+  uniqueIndex("uq_requirement_revisions_one_current_approved").on(table.requirementId).where(sql`${table.governanceStatus}='APPROVED'`),
+  index("idx_requirement_revisions_requirement_status").on(table.requirementId, table.governanceStatus, table.revisionNumber),
+  index("idx_requirement_revisions_document_version").on(table.documentVersionId),
+  check("ck_requirement_revision_status", sql`${table.governanceStatus} IN ('DRAFT','IN_REVIEW','APPROVED','REJECTED','SUPERSEDED','RETIRED')`),
+  check("ck_requirement_revision_priority", sql`${table.priority} IN ('LOW','MEDIUM','HIGH','CRITICAL')`),
+  check("ck_requirement_revision_numbers", sql`${table.revisionNumber}>0 AND ${table.version}>0`),
+  check("ck_requirement_revision_fields", sql`length(trim(${table.title})) BETWEEN 1 AND 240 AND length(${table.statement})<=20000 AND length(${table.rationale})<=20000 AND length(${table.verificationMethod})<=4000`),
+  check("ck_requirement_revision_hash", sql`${table.contentHash} IS NULL OR (length(${table.contentHash})=64 AND lower(${table.contentHash}) NOT GLOB '*[^0-9a-f]*')`),
+  check("ck_requirement_revision_lock", sql`
+    (${table.governanceStatus}='DRAFT' AND ${table.contentHash} IS NULL AND ${table.submittedAt} IS NULL AND ${table.approvedAt} IS NULL)
+    OR (${table.governanceStatus}='IN_REVIEW' AND ${table.contentHash} IS NOT NULL AND ${table.submittedAt} IS NOT NULL AND ${table.approvedAt} IS NULL)
+    OR (${table.governanceStatus} IN ('APPROVED','SUPERSEDED','RETIRED') AND ${table.contentHash} IS NOT NULL AND ${table.submittedAt} IS NOT NULL AND ${table.approvedAt} IS NOT NULL)
+    OR (${table.governanceStatus}='REJECTED' AND ${table.contentHash} IS NOT NULL AND ${table.submittedAt} IS NOT NULL AND ${table.approvedAt} IS NULL)
+  `),
+]);

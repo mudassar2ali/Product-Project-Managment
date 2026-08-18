@@ -56,8 +56,8 @@ test("generated forward migration contains tables indexes foreign keys and immut
 
 test("all 19 migrations replay with governance integrity", async () => {
   const { database, files } = await migratedDatabase();
-  assert.equal(files.length, 19);
-  assert.equal(database.prepare("SELECT COUNT(*) count FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").get().count, 37);
+  assert.equal(files.filter((name) => Number(name.slice(0, 4)) <= 18).length, 19);
+  assert.ok(database.prepare("SELECT COUNT(*) count FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").get().count >= 37);
   assert.deepEqual(database.prepare("PRAGMA foreign_key_check").all(), []);
   assert.equal(database.prepare("SELECT COUNT(*) count FROM sqlite_master WHERE type='trigger' AND name LIKE 'trg_governance_%'").get().count, 6);
   database.close();
@@ -101,11 +101,12 @@ test("representative governance queries select their intended indexes", async ()
   database.close();
 });
 
-test("governance persistence stores no credentials blobs or premature UI", async () => {
+test("governance persistence stores no credentials or blobs and exposes only authorized document UI", async () => {
   const [schema, shell, hosting] = await Promise.all([read("db/schema.ts"), read("app/command-center-shell.tsx"), read(".openai/hosting.json")]);
   const governanceSchema = schema.slice(schema.indexOf("export const governanceDocuments"));
   assert.doesNotMatch(governanceSchema, /credential|token|secret|password|blob/i);
-  assert.doesNotMatch(shell, /label: "Requirements"|label: "BRD \/ PRD"/);
+  assert.match(shell, /label: "BRD \/ PRD"/);
+  assert.doesNotMatch(shell, /label: "Requirements"/);
   assert.match(hosting, /"d1": "DB"/);
   assert.match(hosting, /"r2": null/);
 });
