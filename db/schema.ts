@@ -451,3 +451,40 @@ export const requirementRevisions = sqliteTable("requirement_revisions", {
     OR (${table.governanceStatus}='REJECTED' AND ${table.contentHash} IS NOT NULL AND ${table.submittedAt} IS NOT NULL AND ${table.approvedAt} IS NULL)
   `),
 ]);
+
+export const requirementRelationships = sqliteTable("requirement_relationships", {
+  id: text("id").primaryKey(),
+  sourceRequirementId: text("source_requirement_id").notNull().references(() => requirements.id, { onDelete: "restrict" }),
+  targetRequirementId: text("target_requirement_id").notNull().references(() => requirements.id, { onDelete: "restrict" }),
+  relationshipType: text("relationship_type").notNull(),
+  rationale: text("rationale").notNull().default(""),
+  version: integer("version").notNull().default(1),
+  ...auditColumns,
+}, (table) => [
+  uniqueIndex("uq_requirement_relationships_edge").on(table.sourceRequirementId, table.targetRequirementId, table.relationshipType),
+  index("idx_requirement_relationships_source").on(table.sourceRequirementId, table.relationshipType),
+  index("idx_requirement_relationships_target").on(table.targetRequirementId, table.relationshipType),
+  check("ck_requirement_relationship_type", sql`${table.relationshipType} IN ('DERIVES_FROM','DEPENDS_ON','CONFLICTS_WITH','DUPLICATES')`),
+  check("ck_requirement_relationship_not_self", sql`${table.sourceRequirementId}<>${table.targetRequirementId}`),
+  check("ck_requirement_relationship_fields", sql`length(${table.rationale})<=2000 AND ${table.version}>0`),
+]);
+
+export const requirementBacklogLinks = sqliteTable("requirement_backlog_links", {
+  id: text("id").primaryKey(),
+  requirementId: text("requirement_id").notNull().references(() => requirements.id, { onDelete: "restrict" }),
+  backlogItemId: text("backlog_item_id").notNull().references(() => backlogItems.id, { onDelete: "restrict" }),
+  linkType: text("link_type").notNull(),
+  coveragePercentage: integer("coverage_percentage"),
+  rationale: text("rationale").notNull().default(""),
+  ...auditColumns,
+}, (table) => [
+  uniqueIndex("uq_requirement_backlog_links_edge").on(table.requirementId, table.backlogItemId, table.linkType),
+  index("idx_requirement_backlog_links_requirement").on(table.requirementId, table.linkType),
+  index("idx_requirement_backlog_links_backlog_item").on(table.backlogItemId),
+  check("ck_requirement_backlog_link_type", sql`${table.linkType} IN ('IMPLEMENTS','PARTIALLY_IMPLEMENTS','VALIDATES')`),
+  check("ck_requirement_backlog_link_fields", sql`length(${table.rationale})<=2000`),
+  check("ck_requirement_backlog_link_coverage", sql`
+    (${table.linkType}='PARTIALLY_IMPLEMENTS' AND ${table.coveragePercentage} IS NOT NULL AND ${table.coveragePercentage} BETWEEN 1 AND 99 AND length(trim(${table.rationale}))>0)
+    OR (${table.linkType}<>'PARTIALLY_IMPLEMENTS' AND ${table.coveragePercentage} IS NULL)
+  `),
+]);

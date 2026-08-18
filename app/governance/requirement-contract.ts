@@ -1,4 +1,20 @@
-import { requirementTypes, type RequirementType } from "./stage3-contract";
+import { requirementBacklogLinkTypes, requirementRelationshipTypes, requirementTypes, type RequirementType } from "./stage3-contract";
+
+export type RequirementRelationshipType = (typeof requirementRelationshipTypes)[number];
+export type RequirementBacklogLinkType = (typeof requirementBacklogLinkTypes)[number];
+
+export type RequirementRelationshipInput = {
+  targetRequirementId: string;
+  relationshipType: RequirementRelationshipType;
+  rationale: string;
+};
+
+export type RequirementBacklogLinkInput = {
+  backlogItemId: string;
+  linkType: RequirementBacklogLinkType;
+  coveragePercentage: number | null;
+  rationale: string;
+};
 
 export const requirementPriorities = ["LOW", "MEDIUM", "HIGH", "CRITICAL"] as const;
 export type RequirementPriority = (typeof requirementPriorities)[number];
@@ -69,6 +85,47 @@ export function validateRequirementRevisionInput(body: unknown): Result<Requirem
   if (value.rationale.length > 20_000) details.rationale = "Rationale cannot exceed 20,000 characters.";
   if (value.verificationMethod.length > 4_000) details.verificationMethod = "Verification method cannot exceed 4,000 characters.";
   if (!priority) details.priority = "Select a valid priority.";
+  return Object.keys(details).length ? { ok: false, details } : { ok: true, value };
+}
+
+export function validateRequirementRelationshipInput(body: unknown): Result<RequirementRelationshipInput> {
+  const source = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  const requestedType = text(source.relationshipType).toUpperCase();
+  const relationshipType = (requirementRelationshipTypes as readonly string[]).includes(requestedType) ? (requestedType as RequirementRelationshipType) : null;
+  const value: RequirementRelationshipInput = {
+    targetRequirementId: identifier(source.targetRequirementId),
+    relationshipType: relationshipType ?? ("DERIVES_FROM" as RequirementRelationshipType),
+    rationale: text(source.rationale),
+  };
+  const details: Record<string, string> = {};
+  if (!value.targetRequirementId) details.targetRequirementId = "Select a target Requirement.";
+  if (!relationshipType) details.relationshipType = "Select a valid relationship type.";
+  if (value.rationale.length > 2_000) details.rationale = "Rationale cannot exceed 2,000 characters.";
+  return Object.keys(details).length ? { ok: false, details } : { ok: true, value };
+}
+
+export function validateRequirementBacklogLinkInput(body: unknown): Result<RequirementBacklogLinkInput> {
+  const source = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  const requestedType = text(source.linkType).toUpperCase();
+  const linkType = (requirementBacklogLinkTypes as readonly string[]).includes(requestedType) ? (requestedType as RequirementBacklogLinkType) : null;
+  const rawCoverage = source.coveragePercentage;
+  const coveragePercentage = rawCoverage === "" || rawCoverage === null || rawCoverage === undefined ? null : Number(rawCoverage);
+  const value: RequirementBacklogLinkInput = {
+    backlogItemId: identifier(source.backlogItemId),
+    linkType: linkType ?? ("IMPLEMENTS" as RequirementBacklogLinkType),
+    coveragePercentage: coveragePercentage === null || Number.isNaN(coveragePercentage) ? null : Math.round(coveragePercentage),
+    rationale: text(source.rationale),
+  };
+  const details: Record<string, string> = {};
+  if (!value.backlogItemId) details.backlogItemId = "Select a Backlog item.";
+  if (!linkType) details.linkType = "Select a valid link type.";
+  if (value.rationale.length > 2_000) details.rationale = "Rationale cannot exceed 2,000 characters.";
+  if (linkType === "PARTIALLY_IMPLEMENTS") {
+    if (value.coveragePercentage === null || value.coveragePercentage < 1 || value.coveragePercentage > 99) details.coveragePercentage = "Provide a coverage percentage between 1 and 99.";
+    if (!value.rationale) details.rationale = "Explain the partial coverage.";
+  } else if (value.coveragePercentage !== null) {
+    details.coveragePercentage = "Coverage percentage only applies to partial implementation.";
+  }
   return Object.keys(details).length ? { ok: false, details } : { ok: true, value };
 }
 

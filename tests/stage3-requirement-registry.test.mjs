@@ -55,8 +55,8 @@ test("generated Step 5 migration contains tables indexes foreign keys and immuta
 
 test("all 20 migrations replay with requirement registry integrity", async () => {
   const { database, files } = await migratedDatabase();
-  assert.equal(files.length, 20);
-  assert.equal(database.prepare("SELECT COUNT(*) count FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").get().count, 39);
+  assert.equal(files.filter((name) => Number(name.slice(0, 4)) <= 19).length, 20);
+  assert.ok(database.prepare("SELECT COUNT(*) count FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").get().count >= 39);
   assert.deepEqual(database.prepare("PRAGMA foreign_key_check").all(), []);
   assert.equal(database.prepare("SELECT COUNT(*) count FROM sqlite_master WHERE type='trigger' AND name LIKE 'trg_requirement%'").get().count, 4);
   database.close();

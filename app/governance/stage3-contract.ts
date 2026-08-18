@@ -155,6 +155,30 @@ export function validateRequirementDraft(input: RequirementDraft) {
   return { ok: Object.keys(errors).length === 0, errors };
 }
 
+export type RequirementBacklogLinkEvidence = {
+  linkType: (typeof requirementBacklogLinkTypes)[number];
+  origin: "LOCAL" | "AZURE_DEVOPS";
+  status: string;
+  deliveryState: string;
+  sourceMissingAt: string | null;
+};
+
+export function deriveRequirementDeliveryStatus(
+  links: readonly RequirementBacklogLinkEvidence[],
+): (typeof requirementDeliveryStatuses)[number] {
+  const implementing = links.filter((link) => link.linkType === "IMPLEMENTS" || link.linkType === "PARTIALLY_IMPLEMENTS");
+  if (!implementing.length) return "NOT_LINKED";
+  if (implementing.some((link) => link.origin === "AZURE_DEVOPS" && link.sourceMissingAt)) return "SOURCE_UNAVAILABLE";
+  const hasPartialLink = implementing.some((link) => link.linkType === "PARTIALLY_IMPLEMENTS");
+  const states = implementing.map((link) => link.deliveryState);
+  const allDone = states.every((state) => state === "DONE");
+  if (allDone && !hasPartialLink) return "IMPLEMENTED";
+  const anyDone = states.some((state) => state === "DONE");
+  if (hasPartialLink || anyDone) return "PARTIAL";
+  const anyActive = states.some((state) => state === "IN_PROGRESS" || state === "VALIDATION");
+  return anyActive ? "IN_PROGRESS" : "PLANNED";
+}
+
 export function requirementCoverageEvidence(
   numerator: number,
   denominator: number,
