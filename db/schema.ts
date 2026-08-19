@@ -603,3 +603,73 @@ export const signoffConditions = sqliteTable("signoff_conditions", {
     OR (${table.status} IN ('SATISFIED','WAIVED') AND ${table.closedBy} IS NOT NULL AND ${table.closedAt} IS NOT NULL AND length(trim(${table.closureEvidence}))>0)
   `),
 ]);
+
+export const governanceStakeholders = sqliteTable("governance_stakeholders", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "restrict" }),
+  displayName: text("display_name").notNull(),
+  function: text("function").notNull().default(""),
+  organization: text("organization").notNull().default(""),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+  ...auditColumns,
+}, (table) => [
+  uniqueIndex("uq_governance_stakeholders_project_name").on(table.projectId, table.displayName),
+  index("idx_governance_stakeholders_user").on(table.userId),
+  index("idx_governance_stakeholders_active").on(table.projectId, table.active),
+  check("ck_governance_stakeholder_fields", sql`length(trim(${table.displayName})) BETWEEN 1 AND 160 AND length(${table.function})<=160 AND length(${table.organization})<=160`),
+]);
+
+export const raciMatrices = sqliteTable("raci_matrices", {
+  id: text("id").primaryKey(),
+  businessId: text("business_id").notNull(),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "restrict" }),
+  title: text("title").notNull(),
+  status: text("status").notNull().default("DRAFT"),
+  revision: integer("revision").notNull().default(1),
+  publishedAt: text("published_at"),
+  version: integer("version").notNull().default(1),
+  ...auditColumns,
+}, (table) => [
+  uniqueIndex("uq_raci_matrices_business_id").on(table.businessId),
+  uniqueIndex("uq_raci_matrices_one_draft").on(table.projectId).where(sql`${table.status}='DRAFT'`),
+  index("idx_raci_matrices_project_status").on(table.projectId, table.status, table.revision),
+  check("ck_raci_matrix_status", sql`${table.status} IN ('DRAFT','PUBLISHED','SUPERSEDED')`),
+  check("ck_raci_matrix_fields", sql`length(trim(${table.businessId})) BETWEEN 1 AND 32 AND length(trim(${table.title})) BETWEEN 1 AND 240 AND ${table.revision}>0 AND ${table.version}>0`),
+  check("ck_raci_matrix_lock", sql`
+    (${table.status}='DRAFT' AND ${table.publishedAt} IS NULL)
+    OR (${table.status} IN ('PUBLISHED','SUPERSEDED') AND ${table.publishedAt} IS NOT NULL)
+  `),
+]);
+
+export const raciActivities = sqliteTable("raci_activities", {
+  id: text("id").primaryKey(),
+  matrixId: text("matrix_id").notNull().references(() => raciMatrices.id, { onDelete: "restrict" }),
+  activityKey: text("activity_key").notNull(),
+  name: text("name").notNull(),
+  sequence: integer("sequence").notNull().default(1),
+  governedSubjectType: text("governed_subject_type"),
+  governedSubjectId: text("governed_subject_id"),
+  ...auditColumns,
+}, (table) => [
+  uniqueIndex("uq_raci_activities_matrix_key").on(table.matrixId, table.activityKey),
+  index("idx_raci_activities_matrix_sequence").on(table.matrixId, table.sequence),
+  check("ck_raci_activity_key", sql`${table.activityKey} GLOB '[A-Za-z0-9_-]*' AND length(${table.activityKey}) BETWEEN 1 AND 64`),
+  check("ck_raci_activity_fields", sql`length(trim(${table.name})) BETWEEN 1 AND 200 AND ${table.sequence}>0`),
+  check("ck_raci_activity_subject", sql`
+    (${table.governedSubjectType} IS NULL AND ${table.governedSubjectId} IS NULL)
+    OR (${table.governedSubjectType} IN ('DOCUMENT','REQUIREMENT','REVIEW','DELIVERY','FEASIBILITY') AND ${table.governedSubjectId} IS NOT NULL)
+  `),
+]);
+
+export const raciAssignments = sqliteTable("raci_assignments", {
+  id: text("id").primaryKey(),
+  activityId: text("activity_id").notNull().references(() => raciActivities.id, { onDelete: "restrict" }),
+  stakeholderId: text("stakeholder_id").notNull().references(() => governanceStakeholders.id, { onDelete: "restrict" }),
+  responsibility: text("responsibility").notNull(),
+  ...auditColumns,
+}, (table) => [
+  uniqueIndex("uq_raci_assignments_activity_stakeholder").on(table.activityId, table.stakeholderId),
+  index("idx_raci_assignments_stakeholder").on(table.stakeholderId),
+  check("ck_raci_assignment_responsibility", sql`${table.responsibility} IN ('RESPONSIBLE','ACCOUNTABLE','CONSULTED','INFORMED')`),
+]);
