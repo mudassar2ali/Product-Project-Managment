@@ -143,13 +143,13 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
         <main id="main-content" className="content" tabIndex={-1}>
           <section className="page-intro">
             <div>
-              <div className="eyebrow">{active === "BRD / PRD" || active === "Requirements" ? "STAGE 3 · REQUIREMENTS GOVERNANCE" : ["Dashboard", "Projects", "Reports", "Backlog", "Sprints", "Integrations", "Audit Trail"].includes(active) ? "STAGE 2 · AGILE DELIVERY" : "STAGE 1 · CORE MANAGEMENT MVP"}</div>
+              <div className="eyebrow">{active === "BRD / PRD" || active === "Requirements" ? "STAGE 3 · REQUIREMENTS GOVERNANCE" : active === "Reports" || active === "Audit Trail" ? "STAGE 2–3 · REPORTING & AUDIT" : ["Dashboard", "Projects", "Backlog", "Sprints", "Integrations"].includes(active) ? "STAGE 2 · AGILE DELIVERY" : "STAGE 1 · CORE MANAGEMENT MVP"}</div>
               <h1>{active}</h1>
               <p>{active === "Dashboard"
                 ? "A single operational view of products, projects, delivery health and management attention, extended with source-labelled Backlog and Sprint evidence."
                 : active === "Projects" ? "Manage Project records and open a source-labelled Stage 2 delivery overview."
-                : active === "Reports" ? "Controlled core and Stage 2 delivery reports generated directly from persisted evidence."
-                : active === "Audit Trail" ? "Tamper-resistant governance history plus sanitized synchronization, capacity, freshness and API control evidence."
+                : active === "Reports" ? "Controlled core, Stage 2 delivery and Stage 3 governance reports generated directly from persisted evidence."
+                : active === "Audit Trail" ? "Tamper-resistant governance history — spanning Stage 2 delivery and Stage 3 governance entities — plus sanitized synchronization, capacity, freshness and API control evidence."
                 : active === "Backlog" ? "Browse one source-labelled local and Azure hierarchy, then inspect delivery evidence without losing Project context."
                 : active === "Sprints" ? "Plan local commitments and inspect Azure delivery evidence with the same Project and source context as Backlog."
                 : active === "Integrations" ? "Normalize read-only Azure DevOps work-item and Team iteration evidence through governed mappings."
@@ -158,7 +158,7 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
                 : `${active} is included in the approved Stage 1 delivery sequence.`}
               </p>
             </div>
-            <div className="step-chip">{active === "Requirements" ? "Stage 3 · Step 11" : active === "BRD / PRD" ? "Stage 3 · Step 4" : active === "Audit Trail" ? "Stage 2 · Step 12" : active === "Dashboard" || active === "Projects" || active === "Reports" ? "Stage 2 · Step 11" : active === "Backlog" || active === "Sprints" ? "Stage 2 · Step 10" : active === "Integrations" ? "Stage 2 · Step 9" : `Implementation step ${current?.step ?? 1}`}</div>
+            <div className="step-chip">{active === "Requirements" ? "Stage 3 · Step 11" : active === "BRD / PRD" ? "Stage 3 · Step 4" : active === "Reports" || active === "Audit Trail" ? "Stage 3 · Step 12" : active === "Dashboard" || active === "Projects" ? "Stage 2 · Step 11" : active === "Backlog" || active === "Sprints" ? "Stage 2 · Step 10" : active === "Integrations" ? "Stage 2 · Step 9" : `Implementation step ${current?.step ?? 1}`}</div>
           </section>
 
           {active === "Dashboard" ? (

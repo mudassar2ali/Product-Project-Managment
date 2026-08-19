@@ -108,7 +108,7 @@ test("Step 12 UI exposes honest responsive operational evidence without live Azu
   const [ui, audit, shell, css] = await Promise.all([read("app/operations/operational-control-center.tsx"), read("app/audit/audit-center.tsx"), read("app/command-center-shell.tsx"), read("app/globals.css")]);
   for (const value of ["Operational control plane", "No live Azure call", "Control integrity", "Delivery pressure", "carryover items", "API latency and outcomes", "Audit protection", "No recent operational exceptions", "AbortController"]) assert.match(ui, new RegExp(value));
   for (const value of ["Action", "From", "To", "Legacy unattributed", "AbortController"]) assert.match(audit, new RegExp(value));
-  assert.match(shell, /Stage 2 · Step 12/);
+  assert.match(shell, /Stage 3 · Step 12/);
   for (const selector of ["operational-control", "operational-kpis", "operational-grid", "operational-facts", "exception-list"]) assert.match(css, new RegExp(`\\.${selector}`));
   assert.doesNotMatch(ui, /Math\.random|sample data/i);
 });

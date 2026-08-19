@@ -76,5 +76,5 @@ test("report center keeps accessible summaries paired with full data tables", as
   assert.match(css, /\.report-summary/);
   assert.match(css, /\.portfolio-delivery-grid/);
   assert.match(css, /\.stage2-project-evidence/);
-  assert.match(shell, /Stage 2 · Step 11/);
+  assert.match(shell, /Stage 3 · Step 12/);
 });
