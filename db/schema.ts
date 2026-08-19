@@ -514,3 +514,92 @@ export const requirementEvidenceReferences = sqliteTable("requirement_evidence_r
     OR (${table.evidenceStatus} IN ('PASSED','FAILED','CONDITIONAL','STALE') AND ${table.observedAt} IS NOT NULL)
   `),
 ]);
+
+export const signoffRequests = sqliteTable("signoff_requests", {
+  id: text("id").primaryKey(),
+  documentVersionId: text("document_version_id").references(() => governanceDocumentVersions.id, { onDelete: "restrict" }),
+  requirementRevisionId: text("requirement_revision_id").references(() => requirementRevisions.id, { onDelete: "restrict" }),
+  status: text("status").notNull().default("PENDING"),
+  requestedBy: text("requested_by").notNull(),
+  requestedAt: text("requested_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  completedAt: text("completed_at"),
+  version: integer("version").notNull().default(1),
+  ...auditColumns,
+}, (table) => [
+  uniqueIndex("uq_signoff_requests_active_document_version").on(table.documentVersionId).where(sql`${table.status} IN ('PENDING','UNDER_REVIEW') AND ${table.documentVersionId} IS NOT NULL`),
+  uniqueIndex("uq_signoff_requests_active_requirement_revision").on(table.requirementRevisionId).where(sql`${table.status} IN ('PENDING','UNDER_REVIEW') AND ${table.requirementRevisionId} IS NOT NULL`),
+  index("idx_signoff_requests_document_version").on(table.documentVersionId, table.status),
+  index("idx_signoff_requests_requirement_revision").on(table.requirementRevisionId, table.status),
+  index("idx_signoff_requests_status").on(table.status, table.requestedAt),
+  check("ck_signoff_request_status", sql`${table.status} IN ('PENDING','UNDER_REVIEW','APPROVED','APPROVED_WITH_CONDITIONS','REJECTED')`),
+  check("ck_signoff_request_subject", sql`
+    (${table.documentVersionId} IS NOT NULL AND ${table.requirementRevisionId} IS NULL)
+    OR (${table.documentVersionId} IS NULL AND ${table.requirementRevisionId} IS NOT NULL)
+  `),
+  check("ck_signoff_request_completion", sql`
+    (${table.status} IN ('PENDING','UNDER_REVIEW') AND ${table.completedAt} IS NULL)
+    OR (${table.status} IN ('APPROVED','APPROVED_WITH_CONDITIONS','REJECTED') AND ${table.completedAt} IS NOT NULL)
+  `),
+  check("ck_signoff_request_numbers", sql`${table.version}>0`),
+]);
+
+export const signoffLanes = sqliteTable("signoff_lanes", {
+  id: text("id").primaryKey(),
+  signoffRequestId: text("signoff_request_id").notNull().references(() => signoffRequests.id, { onDelete: "restrict" }),
+  laneType: text("lane_type").notNull(),
+  required: integer("required", { mode: "boolean" }).notNull().default(true),
+  sequence: integer("sequence").notNull().default(1),
+  assignedApproverUserId: text("assigned_approver_user_id").references(() => users.id, { onDelete: "restrict" }),
+  status: text("status").notNull().default("PENDING"),
+  dueAt: text("due_at"),
+  version: integer("version").notNull().default(1),
+  ...auditColumns,
+}, (table) => [
+  uniqueIndex("uq_signoff_lanes_request_type").on(table.signoffRequestId, table.laneType),
+  index("idx_signoff_lanes_approver_status").on(table.assignedApproverUserId, table.status),
+  index("idx_signoff_lanes_due").on(table.dueAt),
+  check("ck_signoff_lane_type", sql`${table.laneType} IN ('PRODUCT','BUSINESS','ENGINEERING','ARCHITECTURE','QA','COMPLIANCE','LEGAL','FINANCE','OPERATIONS','EXECUTIVE_SPONSOR')`),
+  check("ck_signoff_lane_status", sql`${table.status} IN ('PENDING','UNDER_REVIEW','APPROVED','APPROVED_WITH_CONDITIONS','REJECTED')`),
+  check("ck_signoff_lane_numbers", sql`${table.sequence}>0 AND ${table.version}>0`),
+]);
+
+export const signoffDecisions = sqliteTable("signoff_decisions", {
+  id: text("id").primaryKey(),
+  signoffLaneId: text("signoff_lane_id").notNull().references(() => signoffLanes.id, { onDelete: "restrict" }),
+  decision: text("decision").notNull(),
+  approverUserId: text("approver_user_id").notNull().references(() => users.id, { onDelete: "restrict" }),
+  comment: text("comment").notNull().default(""),
+  decidedAt: text("decided_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  supersedesDecisionId: text("supersedes_decision_id").references((): AnySQLiteColumn => signoffDecisions.id, { onDelete: "restrict" }),
+  ...auditColumns,
+}, (table) => [
+  index("idx_signoff_decisions_lane").on(table.signoffLaneId, table.decidedAt),
+  index("idx_signoff_decisions_approver").on(table.approverUserId),
+  check("ck_signoff_decision_value", sql`${table.decision} IN ('APPROVED','APPROVED_WITH_CONDITIONS','REJECTED')`),
+  check("ck_signoff_decision_comment", sql`length(${table.comment})<=4000`),
+  check("ck_signoff_decision_not_self", sql`${table.supersedesDecisionId} IS NULL OR ${table.supersedesDecisionId}<>${table.id}`),
+]);
+
+export const signoffConditions = sqliteTable("signoff_conditions", {
+  id: text("id").primaryKey(),
+  decisionId: text("decision_id").notNull().references(() => signoffDecisions.id, { onDelete: "restrict" }),
+  description: text("description").notNull(),
+  ownerUserId: text("owner_user_id").references(() => users.id, { onDelete: "restrict" }),
+  dueAt: text("due_at"),
+  status: text("status").notNull().default("OPEN"),
+  closureEvidence: text("closure_evidence").notNull().default(""),
+  closedBy: text("closed_by"),
+  closedAt: text("closed_at"),
+  version: integer("version").notNull().default(1),
+  ...auditColumns,
+}, (table) => [
+  index("idx_signoff_conditions_decision").on(table.decisionId, table.status),
+  index("idx_signoff_conditions_owner_status").on(table.ownerUserId, table.status),
+  index("idx_signoff_conditions_due").on(table.dueAt),
+  check("ck_signoff_condition_status", sql`${table.status} IN ('OPEN','IN_PROGRESS','SATISFIED','WAIVED')`),
+  check("ck_signoff_condition_fields", sql`length(trim(${table.description})) BETWEEN 1 AND 2000 AND length(${table.closureEvidence})<=2000 AND ${table.version}>0`),
+  check("ck_signoff_condition_closure", sql`
+    (${table.status} IN ('OPEN','IN_PROGRESS') AND ${table.closedBy} IS NULL AND ${table.closedAt} IS NULL)
+    OR (${table.status} IN ('SATISFIED','WAIVED') AND ${table.closedBy} IS NOT NULL AND ${table.closedAt} IS NOT NULL AND length(trim(${table.closureEvidence}))>0)
+  `),
+]);
