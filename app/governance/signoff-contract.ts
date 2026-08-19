@@ -1,6 +1,6 @@
 import { signoffLaneTypes } from "./stage3-contract";
 
-export type SignoffSubjectType = "DOCUMENT_VERSION" | "REQUIREMENT_REVISION";
+export type SignoffSubjectType = "DOCUMENT_VERSION" | "REQUIREMENT_REVISION" | "FEASIBILITY_REVISION";
 export type SignoffLaneType = (typeof signoffLaneTypes)[number];
 export type SignoffDecisionValue = "APPROVED" | "APPROVED_WITH_CONDITIONS" | "REJECTED";
 export type SignoffConditionTargetStatus = "IN_PROGRESS" | "SATISFIED" | "WAIVED";
@@ -45,7 +45,10 @@ const identifier = (value: unknown) => {
 export function validateSignoffRequestInput(body: unknown): Result<SignoffRequestInput> {
   const source = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
   const requestedSubjectType = text(source.subjectType).toUpperCase();
-  const subjectType = requestedSubjectType === "DOCUMENT_VERSION" || requestedSubjectType === "REQUIREMENT_REVISION" ? (requestedSubjectType as SignoffSubjectType) : null;
+  const subjectType =
+    requestedSubjectType === "DOCUMENT_VERSION" || requestedSubjectType === "REQUIREMENT_REVISION" || requestedSubjectType === "FEASIBILITY_REVISION"
+      ? (requestedSubjectType as SignoffSubjectType)
+      : null;
   const subjectId = identifier(source.subjectId);
   const rawLanes = Array.isArray(source.lanes) ? source.lanes : [];
   const seenTypes = new Set<string>();

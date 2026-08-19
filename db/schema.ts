@@ -519,6 +519,7 @@ export const signoffRequests = sqliteTable("signoff_requests", {
   id: text("id").primaryKey(),
   documentVersionId: text("document_version_id").references(() => governanceDocumentVersions.id, { onDelete: "restrict" }),
   requirementRevisionId: text("requirement_revision_id").references(() => requirementRevisions.id, { onDelete: "restrict" }),
+  feasibilityRevisionId: text("feasibility_revision_id").references((): AnySQLiteColumn => technicalFeasibilityRevisions.id, { onDelete: "restrict" }),
   status: text("status").notNull().default("PENDING"),
   requestedBy: text("requested_by").notNull(),
   requestedAt: text("requested_at").notNull().default(sql`CURRENT_TIMESTAMP`),
@@ -528,13 +529,16 @@ export const signoffRequests = sqliteTable("signoff_requests", {
 }, (table) => [
   uniqueIndex("uq_signoff_requests_active_document_version").on(table.documentVersionId).where(sql`${table.status} IN ('PENDING','UNDER_REVIEW') AND ${table.documentVersionId} IS NOT NULL`),
   uniqueIndex("uq_signoff_requests_active_requirement_revision").on(table.requirementRevisionId).where(sql`${table.status} IN ('PENDING','UNDER_REVIEW') AND ${table.requirementRevisionId} IS NOT NULL`),
+  uniqueIndex("uq_signoff_requests_active_feasibility_revision").on(table.feasibilityRevisionId).where(sql`${table.status} IN ('PENDING','UNDER_REVIEW') AND ${table.feasibilityRevisionId} IS NOT NULL`),
   index("idx_signoff_requests_document_version").on(table.documentVersionId, table.status),
   index("idx_signoff_requests_requirement_revision").on(table.requirementRevisionId, table.status),
+  index("idx_signoff_requests_feasibility_revision").on(table.feasibilityRevisionId, table.status),
   index("idx_signoff_requests_status").on(table.status, table.requestedAt),
   check("ck_signoff_request_status", sql`${table.status} IN ('PENDING','UNDER_REVIEW','APPROVED','APPROVED_WITH_CONDITIONS','REJECTED')`),
   check("ck_signoff_request_subject", sql`
-    (${table.documentVersionId} IS NOT NULL AND ${table.requirementRevisionId} IS NULL)
-    OR (${table.documentVersionId} IS NULL AND ${table.requirementRevisionId} IS NOT NULL)
+    (${table.documentVersionId} IS NOT NULL AND ${table.requirementRevisionId} IS NULL AND ${table.feasibilityRevisionId} IS NULL)
+    OR (${table.documentVersionId} IS NULL AND ${table.requirementRevisionId} IS NOT NULL AND ${table.feasibilityRevisionId} IS NULL)
+    OR (${table.documentVersionId} IS NULL AND ${table.requirementRevisionId} IS NULL AND ${table.feasibilityRevisionId} IS NOT NULL)
   `),
   check("ck_signoff_request_completion", sql`
     (${table.status} IN ('PENDING','UNDER_REVIEW') AND ${table.completedAt} IS NULL)
@@ -672,4 +676,82 @@ export const raciAssignments = sqliteTable("raci_assignments", {
   uniqueIndex("uq_raci_assignments_activity_stakeholder").on(table.activityId, table.stakeholderId),
   index("idx_raci_assignments_stakeholder").on(table.stakeholderId),
   check("ck_raci_assignment_responsibility", sql`${table.responsibility} IN ('RESPONSIBLE','ACCOUNTABLE','CONSULTED','INFORMED')`),
+]);
+
+export const technicalFeasibilityAssessments = sqliteTable("technical_feasibility_assessments", {
+  id: text("id").primaryKey(),
+  businessId: text("business_id").notNull(),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "restrict" }),
+  backlogFeatureId: text("backlog_feature_id").references(() => backlogItems.id, { onDelete: "restrict" }),
+  ownerUserId: text("owner_user_id").references(() => users.id, { onDelete: "set null" }),
+  recordStatus: text("record_status").notNull().default("ACTIVE"),
+  archivedAt: text("archived_at"),
+  version: integer("version").notNull().default(1),
+  ...auditColumns,
+}, (table) => [
+  uniqueIndex("uq_technical_feasibility_assessments_business_id").on(table.businessId),
+  index("idx_technical_feasibility_assessments_project_status").on(table.projectId, table.recordStatus),
+  index("idx_technical_feasibility_assessments_feature").on(table.backlogFeatureId),
+  index("idx_technical_feasibility_assessments_owner_status").on(table.ownerUserId, table.recordStatus),
+  check("ck_technical_feasibility_assessment_status", sql`${table.recordStatus} IN ('ACTIVE','ARCHIVED')`),
+  check("ck_technical_feasibility_assessment_fields", sql`length(trim(${table.businessId})) BETWEEN 1 AND 32 AND ${table.version}>0`),
+  check("ck_technical_feasibility_assessment_archive", sql`(${table.recordStatus}='ACTIVE' AND ${table.archivedAt} IS NULL) OR (${table.recordStatus}='ARCHIVED' AND ${table.archivedAt} IS NOT NULL)`),
+]);
+
+export const technicalFeasibilityRevisions = sqliteTable("technical_feasibility_revisions", {
+  id: text("id").primaryKey(),
+  assessmentId: text("assessment_id").notNull().references(() => technicalFeasibilityAssessments.id, { onDelete: "restrict" }),
+  revisionNumber: integer("revision_number").notNull().default(1),
+  status: text("status").notNull().default("DRAFT"),
+  technicalSpike: text("technical_spike").notNull().default(""),
+  architectureReview: text("architecture_review").notNull().default(""),
+  feasibilitySummary: text("feasibility_summary").notNull().default(""),
+  integrationRequirements: text("integration_requirements").notNull().default(""),
+  securityReview: text("security_review").notNull().default(""),
+  technicalConstraints: text("technical_constraints").notNull().default(""),
+  technicalDebtRisk: text("technical_debt_risk").notNull().default(""),
+  engineeringEstimate: integer("engineering_estimate"),
+  estimateUnit: text("estimate_unit"),
+  recommendation: text("recommendation").notNull().default(""),
+  contentHash: text("content_hash"),
+  submittedAt: text("submitted_at"),
+  approvedAt: text("approved_at"),
+  version: integer("version").notNull().default(1),
+  ...auditColumns,
+}, (table) => [
+  uniqueIndex("uq_technical_feasibility_revisions_number").on(table.assessmentId, table.revisionNumber),
+  uniqueIndex("uq_technical_feasibility_revisions_one_draft").on(table.assessmentId).where(sql`${table.status}='DRAFT'`),
+  uniqueIndex("uq_technical_feasibility_revisions_one_current").on(table.assessmentId).where(sql`${table.status} IN ('FEASIBLE','FEASIBLE_WITH_CONDITIONS','NOT_FEASIBLE')`),
+  index("idx_technical_feasibility_revisions_assessment_status").on(table.assessmentId, table.status, table.revisionNumber),
+  check("ck_technical_feasibility_revision_status", sql`${table.status} IN ('DRAFT','IN_REVIEW','FEASIBLE','FEASIBLE_WITH_CONDITIONS','NOT_FEASIBLE','SUPERSEDED')`),
+  check("ck_technical_feasibility_revision_numbers", sql`${table.revisionNumber}>0 AND ${table.version}>0`),
+  check("ck_technical_feasibility_revision_estimate_unit", sql`${table.estimateUnit} IS NULL OR ${table.estimateUnit} IN ('HOURS','DAYS','STORY_POINTS')`),
+  check("ck_technical_feasibility_revision_estimate", sql`
+    (${table.engineeringEstimate} IS NULL AND ${table.estimateUnit} IS NULL)
+    OR (${table.engineeringEstimate} IS NOT NULL AND ${table.engineeringEstimate}>=0 AND ${table.estimateUnit} IS NOT NULL)
+  `),
+  check("ck_technical_feasibility_revision_fields", sql`
+    length(${table.technicalSpike})<=20000 AND length(${table.architectureReview})<=20000 AND length(${table.feasibilitySummary})<=20000
+    AND length(${table.integrationRequirements})<=20000 AND length(${table.securityReview})<=20000 AND length(${table.technicalConstraints})<=20000
+    AND length(${table.technicalDebtRisk})<=20000 AND length(${table.recommendation})<=20000
+  `),
+  check("ck_technical_feasibility_revision_hash", sql`${table.contentHash} IS NULL OR (length(${table.contentHash})=64 AND lower(${table.contentHash}) NOT GLOB '*[^0-9a-f]*')`),
+  check("ck_technical_feasibility_revision_lock", sql`
+    (${table.status}='DRAFT' AND ${table.contentHash} IS NULL AND ${table.submittedAt} IS NULL AND ${table.approvedAt} IS NULL)
+    OR (${table.status}='IN_REVIEW' AND ${table.contentHash} IS NOT NULL AND ${table.submittedAt} IS NOT NULL AND ${table.approvedAt} IS NULL)
+    OR (${table.status} IN ('FEASIBLE','FEASIBLE_WITH_CONDITIONS','SUPERSEDED') AND ${table.contentHash} IS NOT NULL AND ${table.submittedAt} IS NOT NULL AND ${table.approvedAt} IS NOT NULL)
+    OR (${table.status}='NOT_FEASIBLE' AND ${table.contentHash} IS NOT NULL AND ${table.submittedAt} IS NOT NULL AND ${table.approvedAt} IS NULL)
+  `),
+]);
+
+export const feasibilityRequirementLinks = sqliteTable("feasibility_requirement_links", {
+  id: text("id").primaryKey(),
+  assessmentId: text("assessment_id").notNull().references(() => technicalFeasibilityAssessments.id, { onDelete: "restrict" }),
+  requirementId: text("requirement_id").notNull().references(() => requirements.id, { onDelete: "restrict" }),
+  coverageNote: text("coverage_note").notNull().default(""),
+  ...auditColumns,
+}, (table) => [
+  uniqueIndex("uq_feasibility_requirement_links_edge").on(table.assessmentId, table.requirementId),
+  index("idx_feasibility_requirement_links_requirement").on(table.requirementId),
+  check("ck_feasibility_requirement_link_fields", sql`length(${table.coverageNote})<=2000`),
 ]);

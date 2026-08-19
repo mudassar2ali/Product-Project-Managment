@@ -14,8 +14,15 @@ async function loadRequirementRevisionSubject(id: string): Promise<SubjectRow | 
   return row ?? null;
 }
 
-async function loadSubject(subjectType: "DOCUMENT_VERSION" | "REQUIREMENT_REVISION", subjectId: string) {
-  return subjectType === "DOCUMENT_VERSION" ? loadDocumentVersionSubject(subjectId) : loadRequirementRevisionSubject(subjectId);
+async function loadFeasibilityRevisionSubject(id: string): Promise<SubjectRow | null> {
+  const row = await env.DB.prepare("SELECT id,status statusColumn,updated_by authorUserId FROM technical_feasibility_revisions WHERE id=?").bind(id).first<SubjectRow>();
+  return row ?? null;
+}
+
+async function loadSubject(subjectType: "DOCUMENT_VERSION" | "REQUIREMENT_REVISION" | "FEASIBILITY_REVISION", subjectId: string) {
+  if (subjectType === "DOCUMENT_VERSION") return loadDocumentVersionSubject(subjectId);
+  if (subjectType === "REQUIREMENT_REVISION") return loadRequirementRevisionSubject(subjectId);
+  return loadFeasibilityRevisionSubject(subjectId);
 }
 
 async function loadEligibleApprovers(userIds: string[]) {
@@ -26,7 +33,7 @@ async function loadEligibleApprovers(userIds: string[]) {
 }
 
 const requestColumns = `
-  r.id,r.document_version_id documentVersionId,r.requirement_revision_id requirementRevisionId,r.status,
+  r.id,r.document_version_id documentVersionId,r.requirement_revision_id requirementRevisionId,r.feasibility_revision_id feasibilityRevisionId,r.status,
   r.requested_by requestedBy,r.requested_at requestedAt,r.completed_at completedAt,r.version,r.created_at createdAt,r.updated_at updatedAt
 `;
 
@@ -87,12 +94,13 @@ export async function createSignoffRequest(input: SignoffRequestInput, actor: st
   const id = crypto.randomUUID();
   const documentVersionId = input.subjectType === "DOCUMENT_VERSION" ? input.subjectId : null;
   const requirementRevisionId = input.subjectType === "REQUIREMENT_REVISION" ? input.subjectId : null;
+  const feasibilityRevisionId = input.subjectType === "FEASIBILITY_REVISION" ? input.subjectId : null;
   const statements = [
     env.DB
       .prepare(
-        "INSERT INTO signoff_requests(id,document_version_id,requirement_revision_id,status,requested_by,created_by,updated_by) SELECT ?,?,?,'PENDING',?,?,? WHERE NOT EXISTS(SELECT 1 FROM signoff_requests WHERE (document_version_id=? OR requirement_revision_id=?) AND status IN ('PENDING','UNDER_REVIEW'))",
+        "INSERT INTO signoff_requests(id,document_version_id,requirement_revision_id,feasibility_revision_id,status,requested_by,created_by,updated_by) SELECT ?,?,?,?,'PENDING',?,?,? WHERE NOT EXISTS(SELECT 1 FROM signoff_requests WHERE (document_version_id=? OR requirement_revision_id=? OR feasibility_revision_id=?) AND status IN ('PENDING','UNDER_REVIEW'))",
       )
-      .bind(id, documentVersionId, requirementRevisionId, actor, actor, actor, documentVersionId, requirementRevisionId),
+      .bind(id, documentVersionId, requirementRevisionId, feasibilityRevisionId, actor, actor, actor, documentVersionId, requirementRevisionId, feasibilityRevisionId),
     ...input.lanes.map((lane, index) =>
       env.DB
         .prepare("INSERT INTO signoff_lanes(id,signoff_request_id,lane_type,required,sequence,assigned_approver_user_id,status,created_by,updated_by) SELECT ?,?,?,?,?,?,'PENDING',?,? WHERE EXISTS(SELECT 1 FROM signoff_requests WHERE id=?)")
@@ -107,7 +115,7 @@ export async function createSignoffRequest(input: SignoffRequestInput, actor: st
   return { kind: "ok" as const, id };
 }
 
-async function applySubjectDecision(subjectType: "DOCUMENT_VERSION" | "REQUIREMENT_REVISION" | null, subjectId: string | null, aggregate: SignoffStatus, actor: string) {
+async function applySubjectDecision(subjectType: "DOCUMENT_VERSION" | "REQUIREMENT_REVISION" | "FEASIBILITY_REVISION" | null, subjectId: string | null, aggregate: SignoffStatus, actor: string) {
   if (!subjectType || !subjectId) return null;
   if (subjectType === "DOCUMENT_VERSION") {
     return env.DB
@@ -115,6 +123,14 @@ async function applySubjectDecision(subjectType: "DOCUMENT_VERSION" | "REQUIREME
         "UPDATE governance_document_versions SET lifecycle_status=?,approved_at=CASE WHEN ? IN ('APPROVED','APPROVED_WITH_CONDITIONS') THEN CURRENT_TIMESTAMP ELSE NULL END,version=version+1,updated_at=CURRENT_TIMESTAMP,updated_by=? WHERE id=? AND lifecycle_status='IN_REVIEW'",
       )
       .bind(aggregate, aggregate, actor, subjectId);
+  }
+  if (subjectType === "FEASIBILITY_REVISION") {
+    const feasibilityStatus = aggregate === "APPROVED" ? "FEASIBLE" : aggregate === "APPROVED_WITH_CONDITIONS" ? "FEASIBLE_WITH_CONDITIONS" : "NOT_FEASIBLE";
+    return env.DB
+      .prepare(
+        "UPDATE technical_feasibility_revisions SET status=?,approved_at=CASE WHEN ?='NOT_FEASIBLE' THEN NULL ELSE CURRENT_TIMESTAMP END,version=version+1,updated_at=CURRENT_TIMESTAMP,updated_by=? WHERE id=? AND status='IN_REVIEW'",
+      )
+      .bind(feasibilityStatus, feasibilityStatus, actor, subjectId);
   }
   const requirementStatus = aggregate === "REJECTED" ? "REJECTED" : "APPROVED";
   return env.DB
@@ -128,13 +144,13 @@ export async function recordSignoffDecision(laneId: string, input: SignoffDecisi
   const lane = await env.DB
     .prepare(
       `SELECT l.id,l.signoff_request_id signoffRequestId,l.status,l.version,l.assigned_approver_user_id assignedApproverUserId,
-        r.status requestStatus,r.version requestVersion,r.document_version_id documentVersionId,r.requirement_revision_id requirementRevisionId
+        r.status requestStatus,r.version requestVersion,r.document_version_id documentVersionId,r.requirement_revision_id requirementRevisionId,r.feasibility_revision_id feasibilityRevisionId
       FROM signoff_lanes l JOIN signoff_requests r ON r.id=l.signoff_request_id WHERE l.id=?`,
     )
     .bind(laneId)
     .first<{
       id: string; signoffRequestId: string; status: string; version: number; assignedApproverUserId: string | null;
-      requestStatus: string; requestVersion: number; documentVersionId: string | null; requirementRevisionId: string | null;
+      requestStatus: string; requestVersion: number; documentVersionId: string | null; requirementRevisionId: string | null; feasibilityRevisionId: string | null;
     }>();
   if (!lane) return { kind: "not_found" as const };
   if (lane.assignedApproverUserId !== actor) return { kind: "not_assigned" as const };
@@ -144,7 +160,9 @@ export async function recordSignoffDecision(laneId: string, input: SignoffDecisi
     ? await loadDocumentVersionSubject(lane.documentVersionId)
     : lane.requirementRevisionId
       ? await loadRequirementRevisionSubject(lane.requirementRevisionId)
-      : null;
+      : lane.feasibilityRevisionId
+        ? await loadFeasibilityRevisionSubject(lane.feasibilityRevisionId)
+        : null;
   if (subject?.authorUserId === actor) return { kind: "self_approval_forbidden" as const };
 
   const decisionId = crypto.randomUUID();
@@ -178,8 +196,14 @@ export async function recordSignoffDecision(laneId: string, input: SignoffDecisi
   const terminal = aggregate === "APPROVED" || aggregate === "APPROVED_WITH_CONDITIONS" || aggregate === "REJECTED";
   const transitioning = terminal || (aggregate === "UNDER_REVIEW" && lane.requestStatus === "PENDING");
   if (transitioning) {
-    const subjectType = lane.documentVersionId ? ("DOCUMENT_VERSION" as const) : lane.requirementRevisionId ? ("REQUIREMENT_REVISION" as const) : null;
-    const subjectId = lane.documentVersionId ?? lane.requirementRevisionId;
+    const subjectType = lane.documentVersionId
+      ? ("DOCUMENT_VERSION" as const)
+      : lane.requirementRevisionId
+        ? ("REQUIREMENT_REVISION" as const)
+        : lane.feasibilityRevisionId
+          ? ("FEASIBILITY_REVISION" as const)
+          : null;
+    const subjectId = lane.documentVersionId ?? lane.requirementRevisionId ?? lane.feasibilityRevisionId;
     const followUp = [
       env.DB
         .prepare(
