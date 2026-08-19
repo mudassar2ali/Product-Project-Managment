@@ -136,5 +136,5 @@ test("sign-off subject propagation maps aggregate decisions onto feasibility out
 
 test("Feasibility remains unexposed in navigation", async () => {
   const shell = await read("app/command-center-shell.tsx");
-  for (const deferred of ["Requirements", "Traceability", "Sign-offs", "RACI", "Feasibility"]) assert.doesNotMatch(shell, new RegExp(`label: "${deferred}"`));
+  for (const deferred of ["Traceability", "Sign-offs", "RACI", "Feasibility"]) assert.doesNotMatch(shell, new RegExp(`label: "${deferred}"`));
 });

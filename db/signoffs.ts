@@ -37,13 +37,17 @@ const requestColumns = `
   r.requested_by requestedBy,r.requested_at requestedAt,r.completed_at completedAt,r.version,r.created_at createdAt,r.updated_at updatedAt
 `;
 
-export async function listSignoffRequests(input: { status: string; approverUserId: string; page: number; pageSize: number }) {
+export async function listSignoffRequests(input: { status: string; approverUserId: string; subjectId: string; page: number; pageSize: number }) {
   const conditions: string[] = [];
   const values: unknown[] = [];
   if (input.status) { conditions.push("r.status=?"); values.push(input.status); }
   if (input.approverUserId) {
     conditions.push("EXISTS(SELECT 1 FROM signoff_lanes l WHERE l.signoff_request_id=r.id AND l.assigned_approver_user_id=?)");
     values.push(input.approverUserId);
+  }
+  if (input.subjectId) {
+    conditions.push("(r.document_version_id=? OR r.requirement_revision_id=? OR r.feasibility_revision_id=?)");
+    values.push(input.subjectId, input.subjectId, input.subjectId);
   }
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   const [rows, count] = await Promise.all([

@@ -103,7 +103,7 @@ test("Step 4 record is complete and later Stage 3 modules remain unexposed", asy
   const [shell, record, hosting] = await Promise.all([read("app/command-center-shell.tsx"), read("outputs/STAGE-3-IMPLEMENTATION-RECORD.md"), read(".openai/hosting.json")]);
   assert.match(record, /## Step 4 — PRD Structured Authoring and Version Workflow/);
   assert.match(record, /all 19 mandated PRD sections/);
-  for (const deferred of ["Requirements", "Traceability", "Sign-offs", "RACI", "Feasibility"]) assert.doesNotMatch(shell, new RegExp(`label: "${deferred}"`));
+  for (const deferred of ["Traceability", "Sign-offs", "RACI", "Feasibility"]) assert.doesNotMatch(shell, new RegExp(`label: "${deferred}"`));
   assert.match(hosting, /"d1": "DB"/);
   assert.match(hosting, /"r2": null/);
 });

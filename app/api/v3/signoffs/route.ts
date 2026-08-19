@@ -18,8 +18,9 @@ export async function GET(request: Request) {
   const pageSize = Math.min(100, Math.max(1, Number.parseInt(url.searchParams.get("pageSize") ?? "30", 10) || 30));
   const rawApprover = (url.searchParams.get("approverUserId") ?? "").slice(0, 128);
   const approverUserId = rawApprover === "me" ? context.principal.user.userId : rawApprover;
+  const subjectId = (url.searchParams.get("subjectId") ?? "").slice(0, 128);
   const { listSignoffRequests } = await import("../../../../db/signoffs");
-  const result = await listSignoffRequests({ status: (url.searchParams.get("status") ?? "").slice(0, 32), approverUserId, page, pageSize });
+  const result = await listSignoffRequests({ status: (url.searchParams.get("status") ?? "").slice(0, 32), approverUserId, subjectId, page, pageSize });
   return Response.json(
     { data: result.items, meta: { page, pageSize, total: result.total, totalPages: Math.ceil(result.total / pageSize), correlationId: context.correlationId, timestamp: context.timestamp } },
     { headers: apiHeaders(context.correlationId) },

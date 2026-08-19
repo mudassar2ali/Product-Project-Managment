@@ -111,7 +111,8 @@ test("evidence and portfolio traceability APIs enforce permissions and stable er
   assert.match(joined, /apiHeaders\(context\.correlationId\)/);
 });
 
-test("Requirements and traceability remain unexposed in navigation while later Stage 3 modules stay absent", async () => {
+test("Requirements navigation is exposed while traceability and later Stage 3 modules stay absent", async () => {
   const shell = await read("app/command-center-shell.tsx");
-  for (const deferred of ["Requirements", "Traceability", "Sign-offs", "RACI", "Feasibility"]) assert.doesNotMatch(shell, new RegExp(`label: "${deferred}"`));
+  assert.match(shell, /label: "Requirements"/);
+  for (const deferred of ["Traceability", "Sign-offs", "RACI", "Feasibility"]) assert.doesNotMatch(shell, new RegExp(`label: "${deferred}"`));
 });

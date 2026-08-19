@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { documentSectionTemplates, governanceLifecycleFilters } from "./brd-contract";
 import type { GovernanceDocumentType } from "./stage3-contract";
+import { SignoffPanel } from "./signoff-panel";
 
 type DocumentSummary = {
   id: string; businessId: string; documentType: GovernanceDocumentType; productId: string; productName: string; projectId: string | null; projectName: string | null;
@@ -20,7 +21,7 @@ const documentCopy = {
   PRD: { plural: "PRDs", full: "Product Requirements Documents", singular: "Product Requirements Document" },
 } as const;
 
-export function DocumentCenter({ canCreate, canEdit, canVersion, canSubmit }: { canCreate: boolean; canEdit: boolean; canVersion: boolean; canSubmit: boolean }) {
+export function DocumentCenter({ canCreate, canEdit, canVersion, canSubmit, currentUserId, canRequestSignoff, canDecideSignoff, canManageSignoff, canWaiveCondition }: { canCreate: boolean; canEdit: boolean; canVersion: boolean; canSubmit: boolean; currentUserId: string; canRequestSignoff: boolean; canDecideSignoff: boolean; canManageSignoff: boolean; canWaiveCondition: boolean }) {
   const [activeType, setActiveType] = useState<GovernanceDocumentType>("BRD");
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
   const [total, setTotal] = useState(0);
@@ -184,6 +185,7 @@ export function DocumentCenter({ canCreate, canEdit, canVersion, canSubmit }: { 
           <aside className="brd-history" aria-labelledby="brd-history-title"><h4 id="brd-history-title">Version history</h4>{workspace.versions.map((version) => <div key={version.id}><strong>{version.versionLabel}</strong><span>{version.lifecycleStatus.replaceAll("_", " ")}</span><p>{version.changeSummary || "No change summary."}</p>{version.contentHash && <code title={version.contentHash}>Evidence hash {version.contentHash.slice(0, 12)}…</code>}</div>)}{revisionEligible && canVersion && <div className="revision-create"><label className="field"><span>Revision reason</span><textarea rows={2} value={revisionSummary} onChange={(event) => setRevisionSummary(event.target.value)} /></label><button className="secondary-action" disabled={saving || revisionSummary.trim().length < 5} onClick={() => void createRevision()}>Create revision</button></div>}</aside>
         </main>
       </div>
+      {!isDraft && ["IN_REVIEW", "APPROVED", "APPROVED_WITH_CONDITIONS", "REJECTED", "SUPERSEDED", "RETIRED"].includes(workspace.document.lifecycleStatus) && <SignoffPanel subjectType="DOCUMENT_VERSION" subjectId={workspace.document.currentVersionId} subjectEligible={workspace.document.lifecycleStatus === "IN_REVIEW"} currentUserId={currentUserId} canRequest={canRequestSignoff} canDecide={canDecideSignoff} canManage={canManageSignoff} canWaive={canWaiveCondition} onChanged={() => void loadWorkspace(workspace.document.id)} />}
     </div>}
 
     {metadataOpen && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setMetadataOpen(false); }}><div className="product-dialog brd-dialog" role="dialog" aria-modal="true" aria-labelledby="document-dialog-title"><form onSubmit={saveMetadata}><div className="dialog-header"><div><span className="section-kicker">{editingMetadata ? workspace?.document.businessId : `NEW GOVERNED ${activeType}`}</span><h2 id="document-dialog-title">{editingMetadata ? `Edit ${activeType} details` : `Create ${copy.singular}`}</h2></div><button type="button" aria-label="Close" onClick={() => setMetadataOpen(false)} disabled={saving}>×</button></div><div className="form-grid">

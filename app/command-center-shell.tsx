@@ -19,6 +19,7 @@ import { StoryCriteriaCenter } from "./delivery/story-criteria-center";
 import { DependencyCenter } from "./delivery/dependency-center";
 import { SprintCenter } from "./delivery/sprint-center";
 import { DocumentCenter } from "./governance/brd-center";
+import { GovernanceCenter } from "./governance/governance-center";
 
 type NavItem = {
   label: string;
@@ -34,6 +35,7 @@ const navigation: NavItem[] = [
   { label: "Backlog", icon: "☷", step: 3, permission: "backlog.view" },
   { label: "Sprints", icon: "◷", step: 6, permission: "sprint.view" },
   { label: "BRD / PRD", icon: "▤", step: 4, permission: "document.view" },
+  { label: "Requirements", icon: "☑", step: 11, permission: "requirement.view" },
   { label: "Milestones", icon: "◆", step: 12, permission: "milestone.view" },
   { label: "Ideas", icon: "✦", step: 14, permission: "idea.view" },
   { label: "RAID", icon: "△", step: 13, permission: "raid.view" },
@@ -141,7 +143,7 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
         <main id="main-content" className="content" tabIndex={-1}>
           <section className="page-intro">
             <div>
-              <div className="eyebrow">{active === "BRD / PRD" ? "STAGE 3 · REQUIREMENTS GOVERNANCE" : ["Dashboard", "Projects", "Reports", "Backlog", "Sprints", "Integrations", "Audit Trail"].includes(active) ? "STAGE 2 · AGILE DELIVERY" : "STAGE 1 · CORE MANAGEMENT MVP"}</div>
+              <div className="eyebrow">{active === "BRD / PRD" || active === "Requirements" ? "STAGE 3 · REQUIREMENTS GOVERNANCE" : ["Dashboard", "Projects", "Reports", "Backlog", "Sprints", "Integrations", "Audit Trail"].includes(active) ? "STAGE 2 · AGILE DELIVERY" : "STAGE 1 · CORE MANAGEMENT MVP"}</div>
               <h1>{active}</h1>
               <p>{active === "Dashboard"
                 ? "A single operational view of products, projects, delivery health and management attention, extended with source-labelled Backlog and Sprint evidence."
@@ -152,10 +154,11 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
                 : active === "Sprints" ? "Plan local commitments and inspect Azure delivery evidence with the same Project and source context as Backlog."
                 : active === "Integrations" ? "Normalize read-only Azure DevOps work-item and Team iteration evidence through governed mappings."
                 : active === "BRD / PRD" ? "Author structured Business and Product Requirements Documents with persisted drafts, immutable review evidence and governed version history."
+                : active === "Requirements" ? "Register governed Requirements, trace them to Backlog delivery and verification evidence, and open RACI, feasibility and sign-off governance workspaces."
                 : `${active} is included in the approved Stage 1 delivery sequence.`}
               </p>
             </div>
-            <div className="step-chip">{active === "BRD / PRD" ? "Stage 3 · Step 4" : active === "Audit Trail" ? "Stage 2 · Step 12" : active === "Dashboard" || active === "Projects" || active === "Reports" ? "Stage 2 · Step 11" : active === "Backlog" || active === "Sprints" ? "Stage 2 · Step 10" : active === "Integrations" ? "Stage 2 · Step 9" : `Implementation step ${current?.step ?? 1}`}</div>
+            <div className="step-chip">{active === "Requirements" ? "Stage 3 · Step 11" : active === "BRD / PRD" ? "Stage 3 · Step 4" : active === "Audit Trail" ? "Stage 2 · Step 12" : active === "Dashboard" || active === "Projects" || active === "Reports" ? "Stage 2 · Step 11" : active === "Backlog" || active === "Sprints" ? "Stage 2 · Step 10" : active === "Integrations" ? "Stage 2 · Step 9" : `Implementation step ${current?.step ?? 1}`}</div>
           </section>
 
           {active === "Dashboard" ? (
@@ -169,7 +172,16 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
           ) : active === "Sprints" ? (
             <SprintCenter canCreate={principal.permissions.includes("sprint.create")} canPlan={principal.permissions.includes("sprint.plan")} canActivate={principal.permissions.includes("sprint.activate")} canComplete={principal.permissions.includes("sprint.complete")} canViewMetrics={principal.permissions.includes("delivery.metrics.view")} initialProjectId={deliveryProjectId} onProjectChange={setDeliveryProjectId} onOpenBacklog={principal.permissions.includes("backlog.view") ? (projectId) => { setDeliveryProjectId(projectId); select("Backlog"); } : undefined} />
           ) : active === "BRD / PRD" ? (
-            <DocumentCenter canCreate={principal.permissions.includes("document.create")} canEdit={principal.permissions.includes("document.edit")} canVersion={principal.permissions.includes("document.version")} canSubmit={principal.permissions.includes("document.submit")} />
+            <DocumentCenter canCreate={principal.permissions.includes("document.create")} canEdit={principal.permissions.includes("document.edit")} canVersion={principal.permissions.includes("document.version")} canSubmit={principal.permissions.includes("document.submit")} currentUserId={user.userId} canRequestSignoff={principal.permissions.includes("signoff.request")} canDecideSignoff={principal.permissions.includes("signoff.decide")} canManageSignoff={principal.permissions.includes("signoff.manage")} canWaiveCondition={principal.permissions.includes("signoff.waive_condition")} />
+          ) : active === "Requirements" ? (
+            <GovernanceCenter
+              initialProjectId={deliveryProjectId} onProjectChange={setDeliveryProjectId}
+              canCreateRequirement={principal.permissions.includes("requirement.create")} canEditRequirement={principal.permissions.includes("requirement.edit")} canSubmitRequirement={principal.permissions.includes("requirement.submit")} canArchiveRequirement={principal.permissions.includes("requirement.archive")} canLinkRequirement={principal.permissions.includes("requirement.link")}
+              canManageTraceability={principal.permissions.includes("traceability.manage")} canRecordEvidence={principal.permissions.includes("traceability.evidence")}
+              canViewRaci={principal.permissions.includes("raci.view")} canManageRaci={principal.permissions.includes("raci.manage")} canPublishRaci={principal.permissions.includes("raci.publish")}
+              canViewFeasibility={principal.permissions.includes("feasibility.view")} canEditFeasibility={principal.permissions.includes("feasibility.edit")} canSubmitFeasibility={principal.permissions.includes("feasibility.submit")}
+              currentUserId={user.userId} canRequestSignoff={principal.permissions.includes("signoff.request")} canDecideSignoff={principal.permissions.includes("signoff.decide")} canManageSignoff={principal.permissions.includes("signoff.manage")} canWaiveCondition={principal.permissions.includes("signoff.waive_condition")}
+            />
           ) : active === "Milestones" ? (
             <MilestoneCenter canCreate={principal.permissions.includes("milestone.create")} canEdit={principal.permissions.includes("milestone.edit")} canArchive={principal.permissions.includes("milestone.archive")} />
           ) : active === "RAID" ? (

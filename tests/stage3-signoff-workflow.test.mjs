@@ -136,5 +136,5 @@ test("sign-off APIs enforce independent permissions, waiver elevation and stable
 
 test("Sign-offs remain unexposed in navigation while RACI and Feasibility stay absent", async () => {
   const shell = await read("app/command-center-shell.tsx");
-  for (const deferred of ["Requirements", "Traceability", "Sign-offs", "RACI", "Feasibility"]) assert.doesNotMatch(shell, new RegExp(`label: "${deferred}"`));
+  for (const deferred of ["Traceability", "Sign-offs", "RACI", "Feasibility"]) assert.doesNotMatch(shell, new RegExp(`label: "${deferred}"`));
 });

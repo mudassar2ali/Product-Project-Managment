@@ -115,7 +115,8 @@ test("requirement APIs enforce atomic permissions, validation, stable errors and
   assert.match(joined, /apiHeaders\(context\.correlationId\)/);
 });
 
-test("requirement registry remains unexposed in navigation while later Stage 3 modules stay absent", async () => {
+test("requirement registry navigation is exposed while later Stage 3 modules stay absent", async () => {
   const shell = await read("app/command-center-shell.tsx");
-  for (const deferred of ["Requirements", "Traceability", "Sign-offs", "RACI", "Feasibility"]) assert.doesNotMatch(shell, new RegExp(`label: "${deferred}"`));
+  assert.match(shell, /label: "Requirements"/);
+  for (const deferred of ["Traceability", "Sign-offs", "RACI", "Feasibility"]) assert.doesNotMatch(shell, new RegExp(`label: "${deferred}"`));
 });

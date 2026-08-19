@@ -89,7 +89,7 @@ test("BRD authoring remains accessible and responsive without color-only section
 
 test("BRD workflow remains available while later governance modules stay absent", async () => {
   const [shell, center, record] = await Promise.all([read("app/command-center-shell.tsx"), read("app/governance/brd-center.tsx"), read("outputs/STAGE-3-IMPLEMENTATION-RECORD.md")]);
-  for (const deferred of ["Requirements", "Traceability", "Sign-offs", "RACI", "Feasibility"]) assert.doesNotMatch(shell, new RegExp(`label: "${deferred}"`));
+  for (const deferred of ["Traceability", "Sign-offs", "RACI", "Feasibility"]) assert.doesNotMatch(shell, new RegExp(`label: "${deferred}"`));
   assert.match(center, /Business Requirements Documents/);
   assert.match(record, /## Step 3 — BRD Structured Authoring and Version Workflow/);
 });

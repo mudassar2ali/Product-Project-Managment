@@ -117,5 +117,5 @@ test("RACI API enforces view/manage/publish permissions independently and return
 
 test("RACI remains unexposed in navigation while Feasibility stays absent", async () => {
   const shell = await read("app/command-center-shell.tsx");
-  for (const deferred of ["Requirements", "Traceability", "Sign-offs", "RACI", "Feasibility"]) assert.doesNotMatch(shell, new RegExp(`label: "${deferred}"`));
+  for (const deferred of ["Traceability", "Sign-offs", "RACI", "Feasibility"]) assert.doesNotMatch(shell, new RegExp(`label: "${deferred}"`));
 });

@@ -106,7 +106,7 @@ test("governance persistence stores no credentials or blobs and exposes only aut
   const governanceSchema = schema.slice(schema.indexOf("export const governanceDocuments"));
   assert.doesNotMatch(governanceSchema, /credential|token|secret|password|blob/i);
   assert.match(shell, /label: "BRD \/ PRD"/);
-  assert.doesNotMatch(shell, /label: "Requirements"/);
+  assert.match(shell, /label: "Requirements"/);
   assert.match(hosting, /"d1": "DB"/);
   assert.match(hosting, /"r2": null/);
 });
