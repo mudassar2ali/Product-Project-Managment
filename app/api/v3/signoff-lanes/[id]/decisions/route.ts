@@ -6,6 +6,9 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const context = await authorizeApi("signoff.decide");
   if (isResponse(context)) return context;
+  const { consumeRateLimit, rateLimitHeaders, recordOperationalEvent } = await import("../../../../../../db/operations");
+  const rateLimit = await consumeRateLimit("SIGNOFF_DECISION", context.principal.user.userId);
+  if (!rateLimit.allowed) return apiError(429, "OPERATION_RATE_LIMITED", "Sign-off decisions are temporarily limited. Try again after the stated interval.", context.correlationId, context.timestamp, [], rateLimitHeaders(rateLimit));
   let body: unknown;
   try { body = await request.json(); }
   catch { return apiError(400, "INVALID_JSON", "Request body must be valid JSON.", context.correlationId, context.timestamp); }
@@ -22,6 +25,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     self_approval_forbidden: [403, "SELF_APPROVAL_FORBIDDEN", "You cannot approve a subject you authored."],
     conflict: [409, "SIGNOFF_LANE_CONFLICT", "This lane changed since you loaded it. Reload and try again."],
   } as const;
-  if (result.kind !== "ok") { const error = errors[result.kind]; return apiError(error[0], error[1], error[2], context.correlationId, context.timestamp); }
-  return Response.json({ data: result, meta: { correlationId: context.correlationId, timestamp: context.timestamp } }, { status: 201, headers: apiHeaders(context.correlationId) });
+  if (result.kind !== "ok") {
+    const error = errors[result.kind];
+    await recordOperationalEvent({ operation: "SIGNOFF_DECISION", outcome: "REJECTED", statusCode: error[0], durationMs: 0, actorUserId: context.principal.user.userId, correlationId: context.correlationId, entityType: "SignoffLane", entityId: id, details: { errorCode: error[1] } });
+    return apiError(error[0], error[1], error[2], context.correlationId, context.timestamp);
+  }
+  await recordOperationalEvent({ operation: "SIGNOFF_DECISION", outcome: "SUCCESS", statusCode: 201, durationMs: 0, actorUserId: context.principal.user.userId, correlationId: context.correlationId, entityType: "SignoffLane", entityId: id });
+  return Response.json({ data: result, meta: { correlationId: context.correlationId, timestamp: context.timestamp } }, { status: 201, headers: apiHeaders(context.correlationId, rateLimitHeaders(rateLimit)) });
 }

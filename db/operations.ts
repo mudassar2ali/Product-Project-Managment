@@ -3,6 +3,9 @@ import { env } from "cloudflare:workers";
 export const rateLimitPolicies = {
   ADVANCED_SYNC: { limit: 5, windowSeconds: 300 },
   REPORT_EXPORT: { limit: 30, windowSeconds: 300 },
+  GOVERNANCE_SUBMIT: { limit: 20, windowSeconds: 300 },
+  SIGNOFF_DECISION: { limit: 20, windowSeconds: 300 },
+  TRACEABILITY_QUERY: { limit: 20, windowSeconds: 300 },
 } as const;
 
 export type RateLimitedOperation = keyof typeof rateLimitPolicies;

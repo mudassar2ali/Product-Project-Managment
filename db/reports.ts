@@ -1,12 +1,80 @@
 import { env } from "cloudflare:workers";
 
+type ReportRow = Record<string, string | number>;
+
 type ReportDefinition = {
   title: string;
   description: string;
   columns: readonly string[];
-  sql: string;
+  sql?: string;
+  computeRows?: () => Promise<ReportRow[]>;
   sourceFreshness: string;
 };
+
+const documentVersionOrder = `CASE cv.lifecycle_status WHEN 'DRAFT' THEN 0 WHEN 'IN_REVIEW' THEN 1 WHEN 'APPROVED_WITH_CONDITIONS' THEN 2 WHEN 'APPROVED' THEN 3 ELSE 4 END, cv.major_version DESC, cv.minor_version DESC, cv.created_at DESC`;
+const requirementRevisionOrder = `CASE cv.governance_status WHEN 'DRAFT' THEN 0 WHEN 'IN_REVIEW' THEN 1 WHEN 'APPROVED' THEN 2 ELSE 3 END, cv.revision_number DESC, cv.created_at DESC`;
+const feasibilityRevisionOrder = `CASE cv.status WHEN 'DRAFT' THEN 0 WHEN 'IN_REVIEW' THEN 1 WHEN 'FEASIBLE_WITH_CONDITIONS' THEN 2 ELSE 3 END, cv.revision_number DESC, cv.created_at DESC`;
+const subjectTitle = `COALESCE(
+      (SELECT d.title||' — '||v.version_label FROM governance_document_versions v JOIN governance_documents d ON d.id=v.document_id WHERE v.id=sr.document_version_id),
+      (SELECT r.business_id||' — '||rev.title FROM requirement_revisions rev JOIN requirements r ON r.id=rev.requirement_id WHERE rev.id=sr.requirement_revision_id),
+      (SELECT a.business_id||' — Feasibility Rev '||fr.revision_number FROM technical_feasibility_revisions fr JOIN technical_feasibility_assessments a ON a.id=fr.assessment_id WHERE fr.id=sr.feasibility_revision_id)
+    )`;
+const subjectType = `CASE WHEN sr.document_version_id IS NOT NULL THEN 'BRD/PRD' WHEN sr.requirement_revision_id IS NOT NULL THEN 'Requirement' ELSE 'Feasibility' END`;
+
+type DeliveryRequirementRow = { id: string; businessId: string; requirementType: string; productName: string; projectName: string | null; title: string | null; governanceStatus: string | null };
+type DeliveryLinkRow = { requirementId: string; linkType: string; origin: string; status: string; deliveryState: string; sourceMissingAt: string | null };
+type DeliveryEvidenceRow = { requirementId: string; evidenceStatus: string; observedAt: string | null };
+
+async function loadRequirementDeliveryRows() {
+  const { deriveEvidenceFreshness, deriveRequirementDeliveryStatus } = await import("../app/governance/stage3-contract");
+  const requirementsResult = await env.DB.prepare(`
+    SELECT r.id,r.business_id businessId,r.requirement_type requirementType,p.name productName,pr.name projectName,
+      rev.title title,rev.governance_status governanceStatus
+    FROM requirements r
+    JOIN products p ON p.id=r.product_id
+    LEFT JOIN projects pr ON pr.id=r.project_id
+    LEFT JOIN requirement_revisions rev ON rev.id=(
+      SELECT cv.id FROM requirement_revisions cv WHERE cv.requirement_id=r.id ORDER BY ${requirementRevisionOrder} LIMIT 1
+    )
+    WHERE r.record_status='ACTIVE'
+    ORDER BY r.business_id
+  `).all();
+  const requirements = requirementsResult.results as DeliveryRequirementRow[];
+  if (!requirements.length) return [];
+  const ids = requirements.map((requirement: DeliveryRequirementRow) => requirement.id);
+  const placeholders = ids.map(() => "?").join(",");
+  const [linksResult, evidenceResult] = await Promise.all([
+    env.DB.prepare(`
+      SELECT l.requirement_id requirementId,l.link_type linkType,b.origin,b.status,b.delivery_state deliveryState,b.source_missing_at sourceMissingAt
+      FROM requirement_backlog_links l JOIN backlog_items b ON b.id=l.backlog_item_id
+      WHERE l.requirement_id IN (${placeholders})
+    `).bind(...ids).all(),
+    env.DB.prepare(`
+      SELECT requirement_id requirementId,evidence_status evidenceStatus,observed_at observedAt
+      FROM requirement_evidence_references WHERE requirement_id IN (${placeholders})
+    `).bind(...ids).all(),
+  ]);
+  const links = linksResult.results as DeliveryLinkRow[];
+  const evidenceRecords = evidenceResult.results as DeliveryEvidenceRow[];
+  const linksByRequirement = new Map<string, DeliveryLinkRow[]>();
+  for (const link of links) linksByRequirement.set(link.requirementId, [...(linksByRequirement.get(link.requirementId) ?? []), link]);
+  const evidenceByRequirement = new Map<string, DeliveryEvidenceRow[]>();
+  for (const record of evidenceRecords) evidenceByRequirement.set(record.requirementId, [...(evidenceByRequirement.get(record.requirementId) ?? []), record]);
+  const nowIso = new Date().toISOString();
+  return requirements.map((requirement: DeliveryRequirementRow) => {
+    const requirementLinks = linksByRequirement.get(requirement.id) ?? [];
+    const deliveryStatus = deriveRequirementDeliveryStatus(requirementLinks.map((link: DeliveryLinkRow) => ({
+      linkType: link.linkType as "IMPLEMENTS" | "PARTIALLY_IMPLEMENTS" | "VALIDATES",
+      origin: link.origin as "LOCAL" | "AZURE_DEVOPS",
+      status: link.status,
+      deliveryState: link.deliveryState,
+      sourceMissingAt: link.sourceMissingAt,
+    })));
+    const evidence = evidenceByRequirement.get(requirement.id) ?? [];
+    const freshness = evidence.map((record: DeliveryEvidenceRow) => deriveEvidenceFreshness(record.evidenceStatus as "NOT_AVAILABLE" | "PENDING" | "PASSED" | "FAILED" | "CONDITIONAL" | "STALE", record.observedAt, nowIso));
+    return { ...requirement, deliveryStatus, linkCount: requirementLinks.length, evidenceCount: evidence.length, hasStaleEvidence: freshness.includes("STALE") };
+  });
+}
 
 export const reportDefinitions = {
   products: {
@@ -121,10 +189,81 @@ export const reportDefinitions = {
     sql: `SELECT project.name Project,connection.organization Organization,link.azure_project_name||CASE WHEN link.azure_team_name IS NOT NULL THEN ' / '||link.azure_team_name ELSE ' / Whole Project' END 'Azure Scope',(SELECT COUNT(*) FROM azure_mapping_entries mapping WHERE mapping.connection_id=link.connection_id AND mapping.active=1) 'Active Mappings',(SELECT COUNT(*) FROM backlog_items item WHERE item.project_id=link.project_id AND item.origin='AZURE_DEVOPS' AND item.record_status='ACTIVE' AND item.delivery_state<>'UNMAPPED') Mapped,(SELECT COUNT(*) FROM backlog_items item WHERE item.project_id=link.project_id AND item.origin='AZURE_DEVOPS' AND item.record_status='ACTIVE' AND item.delivery_state='UNMAPPED') Unmapped,CASE WHEN (SELECT COUNT(*) FROM backlog_items item WHERE item.project_id=link.project_id AND item.origin='AZURE_DEVOPS' AND item.record_status='ACTIVE')=0 THEN 'Unavailable' ELSE ROUND(100.0*(SELECT COUNT(*) FROM backlog_items item WHERE item.project_id=link.project_id AND item.origin='AZURE_DEVOPS' AND item.record_status='ACTIVE' AND item.delivery_state<>'UNMAPPED')/(SELECT COUNT(*) FROM backlog_items item WHERE item.project_id=link.project_id AND item.origin='AZURE_DEVOPS' AND item.record_status='ACTIVE'))||'%' END Coverage,(SELECT COUNT(*) FROM backlog_items item WHERE item.project_id=link.project_id AND item.origin='AZURE_DEVOPS' AND item.record_status='ACTIVE' AND item.source_missing_at IS NOT NULL) Missing,(SELECT COUNT(*) FROM backlog_items item WHERE item.project_id=link.project_id AND item.origin='AZURE_DEVOPS' AND item.record_status='ACTIVE' AND item.source_missing_at IS NULL AND item.synced_at<datetime('now','-24 hours')) Stale,COALESCE((SELECT run.completed_at FROM azure_sync_runs run WHERE run.link_id=link.id ORDER BY run.started_at DESC,run.id DESC LIMIT 1),'Never') 'Last Sync',COALESCE((SELECT run.status FROM azure_sync_runs run WHERE run.link_id=link.id ORDER BY run.started_at DESC,run.id DESC LIMIT 1),link.last_validation_status) Status FROM azure_project_links link JOIN projects project ON project.id=link.project_id JOIN azure_connections connection ON connection.id=link.connection_id WHERE link.record_status='ACTIVE' AND connection.record_status='ACTIVE' ORDER BY project.name`,
     sourceFreshness: "Latest governed link, mapping and synchronization evidence",
   },
+  "governance-portfolio": {
+    title: "BRD/PRD Portfolio Status and Version Report",
+    description: "Governed BRD and PRD documents with their current version and lifecycle status.",
+    columns: ["ID", "Type", "Title", "Product", "Project", "Owner", "Status", "Version", "Updated"],
+    sql: `SELECT d.business_id ID,d.document_type Type,d.title Title,p.name Product,COALESCE(pr.name,'—') Project,COALESCE(u.display_name,'Unassigned') Owner,COALESCE(v.lifecycle_status,'—') Status,COALESCE(v.version_label,'—') Version,d.updated_at Updated FROM governance_documents d JOIN products p ON p.id=d.product_id LEFT JOIN projects pr ON pr.id=d.project_id LEFT JOIN users u ON u.id=d.owner_user_id LEFT JOIN governance_document_versions v ON v.id=(SELECT cv.id FROM governance_document_versions cv WHERE cv.document_id=d.id ORDER BY ${documentVersionOrder} LIMIT 1) WHERE d.record_status='ACTIVE' ORDER BY d.document_type,d.business_id`,
+    sourceFreshness: "Current persisted records",
+  },
+  "requirement-register": {
+    title: "Requirement Register by Type, Priority, Owner and Governance Status",
+    description: "Every governed Requirement with its current revision status and ownership.",
+    columns: ["ID", "Type", "Title", "Priority", "Product", "Project", "Owner", "Status", "Updated"],
+    sql: `SELECT r.business_id ID,r.requirement_type Type,COALESCE(rev.title,'—') Title,COALESCE(rev.priority,'—') Priority,p.name Product,COALESCE(pr.name,'—') Project,COALESCE(u.display_name,'Unassigned') Owner,COALESCE(rev.governance_status,'—') Status,r.updated_at Updated FROM requirements r JOIN products p ON p.id=r.product_id LEFT JOIN projects pr ON pr.id=r.project_id LEFT JOIN users u ON u.id=r.owner_user_id LEFT JOIN requirement_revisions rev ON rev.id=(SELECT cv.id FROM requirement_revisions cv WHERE cv.requirement_id=r.id ORDER BY ${requirementRevisionOrder} LIMIT 1) WHERE r.record_status='ACTIVE' ORDER BY r.requirement_type,r.business_id`,
+    sourceFreshness: "Current persisted records",
+  },
+  "requirement-traceability-coverage": {
+    title: "Requirement-to-Delivery Traceability Coverage and Gap Report",
+    description: "Requirement delivery status derived from backlog links, with verification evidence counts.",
+    columns: ["ID", "Type", "Title", "Product", "Project", "Governance", "Delivery", "Backlog Links", "Evidence"],
+    computeRows: async () => (await loadRequirementDeliveryRows()).map((row) => ({
+      ID: row.businessId, Type: row.requirementType, Title: row.title ?? "—", Product: row.productName, Project: row.projectName ?? "—",
+      Governance: row.governanceStatus ?? "—", Delivery: row.deliveryStatus, "Backlog Links": row.linkCount, Evidence: row.evidenceCount,
+    })),
+    sourceFreshness: "Current local and latest synchronized Azure records",
+  },
+  "requirement-integrity": {
+    title: "Unlinked, Stale, Source-missing and Conflicting Requirement Report",
+    description: "Requirements needing attention: no delivery link, missing Azure source, stale evidence or conflicting delivery signals.",
+    columns: ["ID", "Type", "Title", "Product", "Project", "Governance", "Delivery", "Attention"],
+    computeRows: async () => (await loadRequirementDeliveryRows())
+      .map((row) => {
+        const attention: string[] = [];
+        if (row.deliveryStatus === "NOT_LINKED") attention.push("Unlinked");
+        if (row.deliveryStatus === "SOURCE_UNAVAILABLE") attention.push("Source missing");
+        if (row.deliveryStatus === "PARTIAL") attention.push("Conflicting delivery signals");
+        if (row.hasStaleEvidence) attention.push("Stale evidence");
+        return { row, attention };
+      })
+      .filter((entry) => entry.attention.length > 0)
+      .map(({ row, attention }) => ({
+        ID: row.businessId, Type: row.requirementType, Title: row.title ?? "—", Product: row.productName, Project: row.projectName ?? "—",
+        Governance: row.governanceStatus ?? "—", Delivery: row.deliveryStatus, Attention: attention.join(", "),
+      })),
+    sourceFreshness: "Current local and latest synchronized Azure records",
+  },
+  "signoff-approval-aging": {
+    title: "Approval Aging and Overdue Lane Report",
+    description: "Open sign-off lanes with elapsed age against their request date and any recorded due date.",
+    columns: ["Subject", "Subject Type", "Lane", "Approver", "Status", "Requested", "Age (days)", "Due", "Overdue"],
+    sql: `SELECT ${subjectTitle} Subject,${subjectType} 'Subject Type',l.lane_type Lane,COALESCE(u.display_name,'Unassigned') Approver,l.status Status,sr.requested_at Requested,CAST(ROUND(julianday('now')-julianday(sr.requested_at)) AS INTEGER) 'Age (days)',COALESCE(l.due_at,'—') Due,CASE WHEN l.due_at IS NOT NULL AND date(l.due_at)<date('now') THEN 'Overdue' ELSE 'On track' END Overdue FROM signoff_lanes l JOIN signoff_requests sr ON sr.id=l.signoff_request_id LEFT JOIN users u ON u.id=l.assigned_approver_user_id WHERE l.status IN ('PENDING','UNDER_REVIEW') ORDER BY 7 DESC`,
+    sourceFreshness: "Current persisted records",
+  },
+  "signoff-condition-tracking": {
+    title: "Approved-with-Conditions and Overdue-Condition Report",
+    description: "Conditions attached to Approved with Conditions decisions, with closure and overdue evidence.",
+    columns: ["Subject", "Subject Type", "Description", "Owner", "Status", "Due", "Overdue", "Created"],
+    sql: `SELECT ${subjectTitle} Subject,${subjectType} 'Subject Type',c.description Description,COALESCE(u.display_name,'Unassigned') Owner,c.status Status,COALESCE(c.due_at,'—') Due,CASE WHEN c.status='OPEN' AND c.due_at IS NOT NULL AND date(c.due_at)<date('now') THEN 'Overdue' ELSE 'On track' END Overdue,c.created_at Created FROM signoff_conditions c JOIN signoff_decisions dec ON dec.id=c.decision_id JOIN signoff_lanes l ON l.id=dec.signoff_lane_id JOIN signoff_requests sr ON sr.id=l.signoff_request_id LEFT JOIN users u ON u.id=c.owner_user_id ORDER BY CASE c.status WHEN 'OPEN' THEN 0 ELSE 1 END,c.created_at DESC`,
+    sourceFreshness: "Current persisted records",
+  },
+  "raci-completeness": {
+    title: "RACI Completeness and Accountability-Gap Report",
+    description: "Every RACI activity with its assignment counts and accountability-gap evidence.",
+    columns: ["Project", "Matrix", "Activity", "Status", "Accountable", "Responsible", "Consulted", "Informed", "Gap"],
+    sql: `SELECT pr.name Project,m.title Matrix,act.name Activity,m.status Status,COALESCE((SELECT GROUP_CONCAT(s.display_name,', ') FROM raci_assignments asg JOIN governance_stakeholders s ON s.id=asg.stakeholder_id WHERE asg.activity_id=act.id AND asg.responsibility='ACCOUNTABLE'),'—') Accountable,COALESCE((SELECT GROUP_CONCAT(s.display_name,', ') FROM raci_assignments asg JOIN governance_stakeholders s ON s.id=asg.stakeholder_id WHERE asg.activity_id=act.id AND asg.responsibility='RESPONSIBLE'),'—') Responsible,(SELECT COUNT(*) FROM raci_assignments asg WHERE asg.activity_id=act.id AND asg.responsibility='CONSULTED') Consulted,(SELECT COUNT(*) FROM raci_assignments asg WHERE asg.activity_id=act.id AND asg.responsibility='INFORMED') Informed,CASE WHEN (SELECT COUNT(*) FROM raci_assignments asg WHERE asg.activity_id=act.id AND asg.responsibility='ACCOUNTABLE')<>1 THEN 'Missing or duplicate Accountable' WHEN (SELECT COUNT(*) FROM raci_assignments asg WHERE asg.activity_id=act.id AND asg.responsibility='RESPONSIBLE')=0 THEN 'Missing Responsible' ELSE 'Complete' END Gap FROM raci_activities act JOIN raci_matrices m ON m.id=act.matrix_id JOIN projects pr ON pr.id=m.project_id ORDER BY pr.name,m.title,act.name`,
+    sourceFreshness: "Current persisted records",
+  },
+  "feasibility-status": {
+    title: "Technical-Feasibility Status, Risk and Outstanding-Condition Report",
+    description: "Feasibility assessments with current recommendation, estimate and open sign-off conditions.",
+    columns: ["ID", "Project", "Feature", "Owner", "Status", "Recommendation", "Estimate", "Open Conditions", "Updated"],
+    sql: `SELECT a.business_id ID,pr.name Project,COALESCE(bi.title,'—') Feature,COALESCE(u.display_name,'Unassigned') Owner,COALESCE(rev.status,'—') Status,COALESCE(NULLIF(rev.recommendation,''),'—') Recommendation,CASE WHEN rev.engineering_estimate IS NOT NULL THEN rev.engineering_estimate||' '||LOWER(rev.estimate_unit) ELSE '—' END Estimate,COALESCE((SELECT COUNT(*) FROM signoff_conditions c JOIN signoff_decisions dec ON dec.id=c.decision_id JOIN signoff_lanes l ON l.id=dec.signoff_lane_id JOIN signoff_requests sr ON sr.id=l.signoff_request_id WHERE sr.feasibility_revision_id=rev.id AND c.status='OPEN'),0) 'Open Conditions',a.updated_at Updated FROM technical_feasibility_assessments a JOIN projects pr ON pr.id=a.project_id LEFT JOIN backlog_items bi ON bi.id=a.backlog_feature_id LEFT JOIN users u ON u.id=a.owner_user_id LEFT JOIN technical_feasibility_revisions rev ON rev.id=(SELECT cv.id FROM technical_feasibility_revisions cv WHERE cv.assessment_id=a.id ORDER BY ${feasibilityRevisionOrder} LIMIT 1) WHERE a.record_status='ACTIVE' ORDER BY pr.name,a.business_id`,
+    sourceFreshness: "Current persisted records",
+  },
 } as const satisfies Record<string, ReportDefinition>;
 
 export type ReportKey = keyof typeof reportDefinitions;
-type ReportRow = Record<string, string | number>;
 type SummaryItem = { label: string; value: number; detail: string };
 
 export function isReportKey(value: string): value is ReportKey {
@@ -132,13 +271,12 @@ export function isReportKey(value: string): value is ReportKey {
 }
 
 export async function getReport(key: ReportKey, input: { q?: string; page?: number; pageSize?: number; exportAll?: boolean }) {
-  const definition = reportDefinitions[key];
+  const definition: ReportDefinition = reportDefinitions[key];
   const q = (input.q || "").trim().toLowerCase();
   const page = Math.max(1, input.page || 1);
   const pageSize = Math.min(100, Math.max(1, input.pageSize || 25));
-  const result = await env.DB.prepare(definition.sql).all<ReportRow>();
-  const all = result.results || [];
-  const filtered = q ? all.filter((row) => Object.values(row).some((value) => String(value).toLowerCase().includes(q))) : all;
+  const all: ReportRow[] = definition.computeRows ? await definition.computeRows() : ((await env.DB.prepare(definition.sql!).all()).results as ReportRow[]) || [];
+  const filtered = q ? all.filter((row: ReportRow) => Object.values(row).some((value) => String(value).toLowerCase().includes(q))) : all;
   const rows = input.exportAll ? filtered : filtered.slice((page - 1) * pageSize, page * pageSize);
   return {
     key,
@@ -200,6 +338,54 @@ function buildSummary(key: ReportKey, rows: ReportRow[]): SummaryItem[] {
     { label: "Mapped items", value: sum("Mapped"), detail: "Normalized work items" },
     { label: "Unmapped items", value: sum("Unmapped"), detail: "Excluded from misleading calculations" },
     { label: "Stale or missing", value: sum("Stale") + sum("Missing"), detail: "Source freshness attention" },
+  ];
+  if (key === "governance-portfolio") return [
+    { label: "Documents", value: rows.length, detail: "Active BRD and PRD records" },
+    { label: "BRD", value: rows.filter((row) => row.Type === "BRD").length, detail: "Business Requirements Documents" },
+    { label: "PRD", value: rows.filter((row) => row.Type === "PRD").length, detail: "Product Requirements Documents" },
+    { label: "Approved", value: rows.filter((row) => ["APPROVED", "APPROVED_WITH_CONDITIONS"].includes(String(row.Status))).length, detail: "Current version is approved" },
+  ];
+  if (key === "requirement-register") return [
+    { label: "Requirements", value: rows.length, detail: "Active governed Requirements" },
+    { label: "Critical / High", value: rows.filter((row) => ["CRITICAL", "HIGH"].includes(String(row.Priority))).length, detail: "Elevated priority evidence" },
+    { label: "Approved", value: rows.filter((row) => row.Status === "APPROVED").length, detail: "Current revision is approved" },
+    { label: "In review", value: rows.filter((row) => row.Status === "IN_REVIEW").length, detail: "Awaiting sign-off decision" },
+  ];
+  if (key === "requirement-traceability-coverage") return [
+    { label: "Requirements", value: rows.length, detail: "Active governed Requirements" },
+    { label: "Implemented", value: rows.filter((row) => row.Delivery === "IMPLEMENTED").length, detail: "Fully delivered against linked work" },
+    { label: "In progress", value: rows.filter((row) => ["IN_PROGRESS", "PARTIAL", "PLANNED"].includes(String(row.Delivery))).length, detail: "Delivery underway or planned" },
+    { label: "Gaps", value: rows.filter((row) => ["NOT_LINKED", "SOURCE_UNAVAILABLE"].includes(String(row.Delivery))).length, detail: "No delivery evidence available" },
+  ];
+  if (key === "requirement-integrity") return [
+    { label: "Requirements needing attention", value: rows.length, detail: "Unlinked, stale, source-missing or conflicting" },
+    { label: "Unlinked", value: rows.filter((row) => String(row.Attention).includes("Unlinked")).length, detail: "No delivery link recorded" },
+    { label: "Source missing", value: rows.filter((row) => String(row.Attention).includes("Source missing")).length, detail: "Linked Azure work item no longer found" },
+    { label: "Stale evidence", value: rows.filter((row) => String(row.Attention).includes("Stale evidence")).length, detail: "Verification evidence beyond the freshness window" },
+  ];
+  if (key === "signoff-approval-aging") return [
+    { label: "Open lanes", value: rows.length, detail: "Pending or under-review approval lanes" },
+    { label: "Overdue", value: rows.filter((row) => row.Overdue === "Overdue").length, detail: "Past the recorded due date" },
+    { label: "Oldest (days)", value: rows.length ? Math.max(...rows.map((row) => Number(row["Age (days)"]))) : 0, detail: "Longest-open lane" },
+    { label: "Average age (days)", value: average("Age (days)"), detail: "Across all open lanes" },
+  ];
+  if (key === "signoff-condition-tracking") return [
+    { label: "Conditions", value: rows.length, detail: "Attached to Approved with Conditions decisions" },
+    { label: "Open", value: rows.filter((row) => row.Status === "OPEN" || row.Status === "IN_PROGRESS").length, detail: "Not yet satisfied or waived" },
+    { label: "Overdue", value: rows.filter((row) => row.Overdue === "Overdue").length, detail: "Past the recorded due date" },
+    { label: "Satisfied / waived", value: rows.filter((row) => ["SATISFIED", "WAIVED"].includes(String(row.Status))).length, detail: "Closed conditions" },
+  ];
+  if (key === "raci-completeness") return [
+    { label: "Activities", value: rows.length, detail: "Across all governed RACI matrices" },
+    { label: "Complete", value: rows.filter((row) => row.Gap === "Complete").length, detail: "Exactly one Accountable and at least one Responsible" },
+    { label: "Accountability gaps", value: rows.filter((row) => row.Gap !== "Complete").length, detail: "Missing or duplicate Accountable, or no Responsible" },
+    { label: "Published matrices", value: new Set(rows.filter((row) => row.Status === "PUBLISHED").map((row) => row.Matrix)).size, detail: "Locked, governed matrices" },
+  ];
+  if (key === "feasibility-status") return [
+    { label: "Assessments", value: rows.length, detail: "Active feasibility assessments" },
+    { label: "Feasible", value: rows.filter((row) => ["FEASIBLE", "FEASIBLE_WITH_CONDITIONS"].includes(String(row.Status))).length, detail: "Current revision recommends feasible" },
+    { label: "Not feasible", value: rows.filter((row) => row.Status === "NOT_FEASIBLE").length, detail: "Current revision recommends not feasible" },
+    { label: "Open conditions", value: sum("Open Conditions"), detail: "Outstanding sign-off conditions" },
   ];
   return [];
 }

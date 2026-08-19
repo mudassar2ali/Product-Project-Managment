@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from "react";
 
 type Entry = { id:string;entityType:string;entityId:string;action:string;actor:string;source:string;correlationId:string;occurredAt:string;before:unknown;after:unknown };
 type Data = { rows:Entry[];total:number;summary:{total:number;entities:number;integrations:number;today:number;unattributedApplicationEvents:number};generatedAt:string;retention:string };
-const entityTypes = ["Product","Project","Milestone","RAID","Idea","AzureConnection","AzureProjectLink","BacklogItem","Sprint"];
-const actions = ["CREATE","UPDATE","ARCHIVE","REVIEW","CONVERT","ESCALATE","CRITERIA_REPLACE","DEPENDENCY_ADD","DEPENDENCY_REMOVE","ITEM_ASSIGN","ITEM_REMOVE","ITEM_REORDER","ACTIVATE","ACTIVE_SCOPE_ADD","ACTIVE_SCOPE_REMOVE","COMPLETE","ADVANCED_SYNC","ADVANCED_SYNC_FAILED","AZURE_SOURCE_MISSING"];
+const entityTypes = ["Product","Project","Milestone","RAID","Idea","AzureConnection","AzureProjectLink","BacklogItem","Sprint","GovernanceDocument","GovernanceDocumentVersion","Requirement","RequirementRevision","SignoffRequest","SignoffLane","SignoffCondition","RaciMatrix","TechnicalFeasibilityAssessment","TechnicalFeasibilityRevision"];
+const actions = ["CREATE","UPDATE","ARCHIVE","REVIEW","CONVERT","ESCALATE","CRITERIA_REPLACE","DEPENDENCY_ADD","DEPENDENCY_REMOVE","ITEM_ASSIGN","ITEM_REMOVE","ITEM_REORDER","ACTIVATE","ACTIVE_SCOPE_ADD","ACTIVE_SCOPE_REMOVE","COMPLETE","ADVANCED_SYNC","ADVANCED_SYNC_FAILED","AZURE_SOURCE_MISSING","CREATE_REVISION","SECTIONS_REPLACE","SUBMIT_REVIEW","RELATIONSHIP_ADD","RELATIONSHIP_REMOVE","BACKLOG_LINK_ADD","BACKLOG_LINK_REMOVE","EVIDENCE_ADD","REQUEST","DECISION","STATUS_TRANSITION","CONDITION_WAIVE","CONDITION_PROGRESS","PUBLISH"];
 
 export function AuditCenter() {
   const [q,setQ] = useState("");

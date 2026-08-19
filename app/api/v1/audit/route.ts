@@ -4,7 +4,7 @@ import { listAudit } from "../../../../db/audit";
 // All responses use cache-control: no-store through the shared API headers.
 export const dynamic = "force-dynamic";
 
-const entities = new Set(["Product","Project","Milestone","RAID","Idea","AzureConnection","AzureProjectLink","BacklogItem","Sprint"]);
+const entities = new Set(["Product","Project","Milestone","RAID","Idea","AzureConnection","AzureProjectLink","BacklogItem","Sprint","GovernanceDocument","GovernanceDocumentVersion","Requirement","RequirementRevision","SignoffRequest","SignoffLane","SignoffCondition","RaciMatrix","TechnicalFeasibilityAssessment","TechnicalFeasibilityRevision"]);
 const sources = new Set(["APPLICATION","AZURE_DEVOPS"]);
 const validDate = (value: string) => !value || (/^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(`${value}T00:00:00Z`).valueOf()));
 

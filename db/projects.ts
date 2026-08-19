@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { calculateOverallProgress, stageKeys, type ProjectInput } from "../app/projects/project-contract";
 import { getProjectDeliveryInsights, type DeliveryInsightAccess } from "./stage2-insights";
+import { getProjectGovernanceSummary, type GovernanceOverviewAccess } from "./governance-overview";
 
 export type ProjectRecord = Omit<ProjectInput, "weights"> & {
   id: string; businessId: string; productName: string; productCode: string; overallProgress: number;
@@ -43,10 +44,10 @@ export async function getProject(id: string) {
   return record ? (await attachWeights([record]))[0] : null;
 }
 
-export async function getProjectOverview(id: string, access: DeliveryInsightAccess = { backlog: true, sprints: true, metrics: true }) {
+export async function getProjectOverview(id: string, access: DeliveryInsightAccess = { backlog: true, sprints: true, metrics: true }, governanceAccess: GovernanceOverviewAccess = { documents: false, requirements: false, signoffs: false, raci: false, feasibility: false }) {
   const project = await getProject(id);
   if (!project) return null;
-  const [activity,deliveryLink,sprint,milestoneRows,raidSummary,deliveryInsights] = await Promise.all([
+  const [activity,deliveryLink,sprint,milestoneRows,raidSummary,deliveryInsights,governance] = await Promise.all([
     env.DB.prepare(`SELECT action, source, correlation_id AS correlationId, occurred_at AS occurredAt FROM audit_logs WHERE entity_type='Project' AND entity_id=? ORDER BY occurred_at DESC LIMIT 12`).bind(id).all<{ action: string; source: string; correlationId: string; occurredAt: string }>(),
     env.DB.prepare(`SELECT c.name AS connectionName,c.organization,l.azure_project_name AS azureProjectName,l.azure_team_name AS azureTeamName,l.last_validated_at AS lastValidatedAt,l.last_validation_status AS validationStatus FROM azure_project_links l JOIN azure_connections c ON c.id=l.connection_id WHERE l.project_id=? AND l.record_status='ACTIVE' AND c.record_status='ACTIVE'`).bind(id).first<{connectionName:string;organization:string;azureProjectName:string;azureTeamName:string|null;lastValidatedAt:string|null;validationStatus:string}>(),
     access.sprints && access.metrics
@@ -55,9 +56,11 @@ export async function getProjectOverview(id: string, access: DeliveryInsightAcce
     env.DB.prepare(`SELECT id,business_id AS businessId,name,type,planned_date AS plannedDate,actual_date AS actualDate,status,CASE WHEN status NOT IN ('Completed','Cancelled') AND date(planned_date)<date('now') THEN 1 ELSE 0 END AS overdue FROM milestones WHERE project_id=? AND record_status='ACTIVE' ORDER BY planned_date LIMIT 12`).bind(id).all(),
     env.DB.prepare(`SELECT COUNT(*) total,COALESCE(SUM(CASE WHEN escalated=1 OR impact='Critical' OR (status NOT IN('Resolved','Closed') AND due_date IS NOT NULL AND date(due_date)<date('now')) THEN 1 ELSE 0 END),0) attention FROM raid_items WHERE project_id=? AND record_status='ACTIVE'`).bind(id).first<{ total: number; attention: number }>(),
     getProjectDeliveryInsights(id, access),
+    getProjectGovernanceSummary(id, governanceAccess),
   ]);
   return {
     project,
+    governance,
     stageProgress: stageKeys.map((stage) => ({
       stage,
       completion: project[`${stage}Progress`],
