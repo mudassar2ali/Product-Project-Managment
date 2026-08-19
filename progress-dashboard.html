@@ -185,7 +185,7 @@ const steps = [
   { n: 10, title: "Technical-Feasibility Assessments and Governed Review", status: "completed", meta: "Built this session · commit 1d5304e · +11 tests · signoff_requests widened to a third subject (feasibility revisions)" },
   { n: 11, title: "Unified Requirements/Documents UX and Project Governance Overview", status: "completed", meta: "Built this session · commit 9b94501 · +8 tests · Requirements joins BRD/PRD as Stage 3's only top-level nav entries; Traceability/Sign-offs/RACI/Feasibility stay contextual" },
   { n: 12, title: "Dashboard, Reports, Audit, Rate Limiting and Operational Hardening", status: "completed", meta: "Built this session · commit ac05456 · +13 tests · 8 new governance reports, 3 new rate-limited operations, Audit Trail filter widening, permission-gated Project Overview governance evidence" },
-  { n: 13, title: "QA and Stage 3 Acceptance Report", status: "pending" },
+  { n: 13, title: "QA and Stage 3 Acceptance Report", status: "completed", meta: "Built this session · commit 3841df7 · +10 tests · 20,000-requirement / 50,000-link / 2,000-lane performance benchmark passed; STAGE-3-ACCEPTANCE-REPORT.md issued READY WITH CONDITIONS (Azure credential still unresolved)" },
 ];
 
 const icons = { completed: "✓", in_progress: "●", pending: "" };
@@ -208,10 +208,10 @@ for (const s of steps) {
 
 const completedCount = steps.filter(s => s.status === "completed").length;
 document.getElementById("stat-steps").textContent = completedCount + " / 13";
-document.getElementById("stat-tests").textContent = "246 / 246";
+document.getElementById("stat-tests").textContent = "256 / 256";
 document.getElementById("stat-migrations").textContent = "25";
-document.getElementById("stat-commits").textContent = "9";
-document.getElementById("updated-at").textContent = "Last updated: Stage 3, Step 12 (dashboard, reports, audit, rate limiting and operational hardening) complete and committed to your Mac (commit ac05456, build/lint/246 tests green) — 8 new governance reports, 3 new rate-limited operations, a widened Audit Trail filter set, and permission-gated Project Overview governance evidence. Step 13 (Stage 3 QA and acceptance report) is next, pending your go-ahead. Run 'git push sites main' on your Mac anytime to deploy current progress to your live site.";
+document.getElementById("stat-commits").textContent = "11";
+document.getElementById("updated-at").textContent = "Last updated: Stage 3, Step 13 (QA and Stage 3 acceptance report) complete and committed to your Mac (commit 3841df7, build/lint/256 tests green) — Stage 3 implementation is done. STAGE-3-ACCEPTANCE-REPORT.md issued a READY WITH CONDITIONS decision: every locally controllable gate passed, and the only open condition is the same unresolved Azure DevOps credential carried forward from Stage 2. Nothing has been pushed live — run 'git push sites main' on your Mac only when you're ready to deploy.";
 </script>
 </body>
 </html>
