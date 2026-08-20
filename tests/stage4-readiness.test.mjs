@@ -80,7 +80,8 @@ test("the readiness repository scopes UAT evidence to Ready test cases, filters 
     "status NOT IN ('CLOSED','DUPLICATE','DEFERRED')",
     "crypto.subtle.digest(\"SHA-256\"",
     "WHERE release_id=? AND source_revision=?",
-    "signoffStatus: null",
+    "SELECT id, status FROM signoff_requests WHERE release_id=? ORDER BY requested_at DESC, id DESC LIMIT 1",
+    "c.status IN ('OPEN','IN_PROGRESS')",
     "READINESS_CALCULATE",
   ]) assert.ok(source.includes(value), `missing ${value}`);
 });

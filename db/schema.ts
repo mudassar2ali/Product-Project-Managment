@@ -520,6 +520,7 @@ export const signoffRequests = sqliteTable("signoff_requests", {
   documentVersionId: text("document_version_id").references(() => governanceDocumentVersions.id, { onDelete: "restrict" }),
   requirementRevisionId: text("requirement_revision_id").references(() => requirementRevisions.id, { onDelete: "restrict" }),
   feasibilityRevisionId: text("feasibility_revision_id").references((): AnySQLiteColumn => technicalFeasibilityRevisions.id, { onDelete: "restrict" }),
+  releaseId: text("release_id").references((): AnySQLiteColumn => releases.id, { onDelete: "restrict" }),
   status: text("status").notNull().default("PENDING"),
   requestedBy: text("requested_by").notNull(),
   requestedAt: text("requested_at").notNull().default(sql`CURRENT_TIMESTAMP`),
@@ -530,15 +531,18 @@ export const signoffRequests = sqliteTable("signoff_requests", {
   uniqueIndex("uq_signoff_requests_active_document_version").on(table.documentVersionId).where(sql`${table.status} IN ('PENDING','UNDER_REVIEW') AND ${table.documentVersionId} IS NOT NULL`),
   uniqueIndex("uq_signoff_requests_active_requirement_revision").on(table.requirementRevisionId).where(sql`${table.status} IN ('PENDING','UNDER_REVIEW') AND ${table.requirementRevisionId} IS NOT NULL`),
   uniqueIndex("uq_signoff_requests_active_feasibility_revision").on(table.feasibilityRevisionId).where(sql`${table.status} IN ('PENDING','UNDER_REVIEW') AND ${table.feasibilityRevisionId} IS NOT NULL`),
+  uniqueIndex("uq_signoff_requests_active_release").on(table.releaseId).where(sql`${table.status} IN ('PENDING','UNDER_REVIEW') AND ${table.releaseId} IS NOT NULL`),
   index("idx_signoff_requests_document_version").on(table.documentVersionId, table.status),
   index("idx_signoff_requests_requirement_revision").on(table.requirementRevisionId, table.status),
   index("idx_signoff_requests_feasibility_revision").on(table.feasibilityRevisionId, table.status),
+  index("idx_signoff_requests_release").on(table.releaseId, table.status),
   index("idx_signoff_requests_status").on(table.status, table.requestedAt),
   check("ck_signoff_request_status", sql`${table.status} IN ('PENDING','UNDER_REVIEW','APPROVED','APPROVED_WITH_CONDITIONS','REJECTED')`),
   check("ck_signoff_request_subject", sql`
-    (${table.documentVersionId} IS NOT NULL AND ${table.requirementRevisionId} IS NULL AND ${table.feasibilityRevisionId} IS NULL)
-    OR (${table.documentVersionId} IS NULL AND ${table.requirementRevisionId} IS NOT NULL AND ${table.feasibilityRevisionId} IS NULL)
-    OR (${table.documentVersionId} IS NULL AND ${table.requirementRevisionId} IS NULL AND ${table.feasibilityRevisionId} IS NOT NULL)
+    (${table.documentVersionId} IS NOT NULL AND ${table.requirementRevisionId} IS NULL AND ${table.feasibilityRevisionId} IS NULL AND ${table.releaseId} IS NULL)
+    OR (${table.documentVersionId} IS NULL AND ${table.requirementRevisionId} IS NOT NULL AND ${table.feasibilityRevisionId} IS NULL AND ${table.releaseId} IS NULL)
+    OR (${table.documentVersionId} IS NULL AND ${table.requirementRevisionId} IS NULL AND ${table.feasibilityRevisionId} IS NOT NULL AND ${table.releaseId} IS NULL)
+    OR (${table.documentVersionId} IS NULL AND ${table.requirementRevisionId} IS NULL AND ${table.feasibilityRevisionId} IS NULL AND ${table.releaseId} IS NOT NULL)
   `),
   check("ck_signoff_request_completion", sql`
     (${table.status} IN ('PENDING','UNDER_REVIEW') AND ${table.completedAt} IS NULL)

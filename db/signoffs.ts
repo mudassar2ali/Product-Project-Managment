@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { aggregateSignoffStatus, type SignoffStatus } from "../app/governance/stage3-contract";
-import type { SignoffDecisionInput, SignoffRequestInput } from "../app/governance/signoff-contract";
+import type { SignoffDecisionInput, SignoffRequestInput, SignoffSubjectType } from "../app/governance/signoff-contract";
 
 type SubjectRow = { id: string; statusColumn: string; authorUserId: string | null };
 
@@ -19,9 +19,26 @@ async function loadFeasibilityRevisionSubject(id: string): Promise<SubjectRow | 
   return row ?? null;
 }
 
-async function loadSubject(subjectType: "DOCUMENT_VERSION" | "REQUIREMENT_REVISION" | "FEASIBILITY_REVISION", subjectId: string) {
+async function loadReleaseSubject(id: string): Promise<SubjectRow | null> {
+  const row = await env.DB.prepare("SELECT id,status statusColumn,updated_by authorUserId FROM releases WHERE id=? AND record_status='ACTIVE'").bind(id).first<SubjectRow>();
+  return row ?? null;
+}
+
+// Each subject type reaches sign-off from a different status name — documents/requirements/feasibility
+// all converge on "IN_REVIEW", while a Release earns eligibility by reaching READY_FOR_SIGNOFF (Stage 4
+// Section 13), a status name that exists only on releases.status. Keeping this per-type rather than a
+// single hardcoded string is what makes adding RELEASE here a pure extension, not a special case.
+const eligibleStatusBySubjectType: Record<SignoffSubjectType, string> = {
+  DOCUMENT_VERSION: "IN_REVIEW",
+  REQUIREMENT_REVISION: "IN_REVIEW",
+  FEASIBILITY_REVISION: "IN_REVIEW",
+  RELEASE: "READY_FOR_SIGNOFF",
+};
+
+async function loadSubject(subjectType: SignoffSubjectType, subjectId: string) {
   if (subjectType === "DOCUMENT_VERSION") return loadDocumentVersionSubject(subjectId);
   if (subjectType === "REQUIREMENT_REVISION") return loadRequirementRevisionSubject(subjectId);
+  if (subjectType === "RELEASE") return loadReleaseSubject(subjectId);
   return loadFeasibilityRevisionSubject(subjectId);
 }
 
@@ -33,7 +50,7 @@ async function loadEligibleApprovers(userIds: string[]) {
 }
 
 const requestColumns = `
-  r.id,r.document_version_id documentVersionId,r.requirement_revision_id requirementRevisionId,r.feasibility_revision_id feasibilityRevisionId,r.status,
+  r.id,r.document_version_id documentVersionId,r.requirement_revision_id requirementRevisionId,r.feasibility_revision_id feasibilityRevisionId,r.release_id releaseId,r.status,
   r.requested_by requestedBy,r.requested_at requestedAt,r.completed_at completedAt,r.version,r.created_at createdAt,r.updated_at updatedAt
 `;
 
@@ -46,8 +63,8 @@ export async function listSignoffRequests(input: { status: string; approverUserI
     values.push(input.approverUserId);
   }
   if (input.subjectId) {
-    conditions.push("(r.document_version_id=? OR r.requirement_revision_id=? OR r.feasibility_revision_id=?)");
-    values.push(input.subjectId, input.subjectId, input.subjectId);
+    conditions.push("(r.document_version_id=? OR r.requirement_revision_id=? OR r.feasibility_revision_id=? OR r.release_id=?)");
+    values.push(input.subjectId, input.subjectId, input.subjectId, input.subjectId);
   }
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   const [rows, count] = await Promise.all([
@@ -90,7 +107,7 @@ export async function getSignoffRequestWorkspace(id: string) {
 export async function createSignoffRequest(input: SignoffRequestInput, actor: string, correlationId: string) {
   const subject = await loadSubject(input.subjectType, input.subjectId);
   if (!subject) return { kind: "not_found" as const };
-  if (subject.statusColumn !== "IN_REVIEW") return { kind: "not_eligible" as const };
+  if (subject.statusColumn !== eligibleStatusBySubjectType[input.subjectType]) return { kind: "not_eligible" as const };
   const approverIds = [...new Set(input.lanes.map((lane) => lane.assignedApproverUserId))];
   const eligible = await loadEligibleApprovers(approverIds);
   const invalidApprover = input.lanes.find((lane) => !eligible.has(lane.assignedApproverUserId));
@@ -99,12 +116,13 @@ export async function createSignoffRequest(input: SignoffRequestInput, actor: st
   const documentVersionId = input.subjectType === "DOCUMENT_VERSION" ? input.subjectId : null;
   const requirementRevisionId = input.subjectType === "REQUIREMENT_REVISION" ? input.subjectId : null;
   const feasibilityRevisionId = input.subjectType === "FEASIBILITY_REVISION" ? input.subjectId : null;
+  const releaseId = input.subjectType === "RELEASE" ? input.subjectId : null;
   const statements = [
     env.DB
       .prepare(
-        "INSERT INTO signoff_requests(id,document_version_id,requirement_revision_id,feasibility_revision_id,status,requested_by,created_by,updated_by) SELECT ?,?,?,?,'PENDING',?,?,? WHERE NOT EXISTS(SELECT 1 FROM signoff_requests WHERE (document_version_id=? OR requirement_revision_id=? OR feasibility_revision_id=?) AND status IN ('PENDING','UNDER_REVIEW'))",
+        "INSERT INTO signoff_requests(id,document_version_id,requirement_revision_id,feasibility_revision_id,release_id,status,requested_by,created_by,updated_by) SELECT ?,?,?,?,?,'PENDING',?,?,? WHERE NOT EXISTS(SELECT 1 FROM signoff_requests WHERE (document_version_id=? OR requirement_revision_id=? OR feasibility_revision_id=? OR release_id=?) AND status IN ('PENDING','UNDER_REVIEW'))",
       )
-      .bind(id, documentVersionId, requirementRevisionId, feasibilityRevisionId, actor, actor, actor, documentVersionId, requirementRevisionId, feasibilityRevisionId),
+      .bind(id, documentVersionId, requirementRevisionId, feasibilityRevisionId, releaseId, actor, actor, actor, documentVersionId, requirementRevisionId, feasibilityRevisionId, releaseId),
     ...input.lanes.map((lane, index) =>
       env.DB
         .prepare("INSERT INTO signoff_lanes(id,signoff_request_id,lane_type,required,sequence,assigned_approver_user_id,status,created_by,updated_by) SELECT ?,?,?,?,?,?,'PENDING',?,? WHERE EXISTS(SELECT 1 FROM signoff_requests WHERE id=?)")
@@ -119,7 +137,7 @@ export async function createSignoffRequest(input: SignoffRequestInput, actor: st
   return { kind: "ok" as const, id };
 }
 
-async function applySubjectDecision(subjectType: "DOCUMENT_VERSION" | "REQUIREMENT_REVISION" | "FEASIBILITY_REVISION" | null, subjectId: string | null, aggregate: SignoffStatus, actor: string) {
+async function applySubjectDecision(subjectType: SignoffSubjectType | null, subjectId: string | null, aggregate: SignoffStatus, actor: string) {
   if (!subjectType || !subjectId) return null;
   if (subjectType === "DOCUMENT_VERSION") {
     return env.DB
@@ -127,6 +145,17 @@ async function applySubjectDecision(subjectType: "DOCUMENT_VERSION" | "REQUIREME
         "UPDATE governance_document_versions SET lifecycle_status=?,approved_at=CASE WHEN ? IN ('APPROVED','APPROVED_WITH_CONDITIONS') THEN CURRENT_TIMESTAMP ELSE NULL END,version=version+1,updated_at=CURRENT_TIMESTAMP,updated_by=? WHERE id=? AND lifecycle_status='IN_REVIEW'",
       )
       .bind(aggregate, aggregate, actor, subjectId);
+  }
+  if (subjectType === "RELEASE") {
+    // aggregate is always APPROVED / APPROVED_WITH_CONDITIONS / REJECTED here (the terminal set),
+    // and READY_FOR_SIGNOFF is the only status that transitions to any of the three per
+    // assertReleaseTransition — so this WHERE guard is exactly that transition table, expressed the
+    // same conditional-UPDATE way the other three subject types already are in this function.
+    return env.DB
+      .prepare(
+        "UPDATE releases SET status=?,version=version+1,updated_at=CURRENT_TIMESTAMP,updated_by=? WHERE id=? AND status='READY_FOR_SIGNOFF'",
+      )
+      .bind(aggregate, actor, subjectId);
   }
   if (subjectType === "FEASIBILITY_REVISION") {
     const feasibilityStatus = aggregate === "APPROVED" ? "FEASIBLE" : aggregate === "APPROVED_WITH_CONDITIONS" ? "FEASIBLE_WITH_CONDITIONS" : "NOT_FEASIBLE";
@@ -148,13 +177,13 @@ export async function recordSignoffDecision(laneId: string, input: SignoffDecisi
   const lane = await env.DB
     .prepare(
       `SELECT l.id,l.signoff_request_id signoffRequestId,l.status,l.version,l.assigned_approver_user_id assignedApproverUserId,
-        r.status requestStatus,r.version requestVersion,r.document_version_id documentVersionId,r.requirement_revision_id requirementRevisionId,r.feasibility_revision_id feasibilityRevisionId
+        r.status requestStatus,r.version requestVersion,r.document_version_id documentVersionId,r.requirement_revision_id requirementRevisionId,r.feasibility_revision_id feasibilityRevisionId,r.release_id releaseId
       FROM signoff_lanes l JOIN signoff_requests r ON r.id=l.signoff_request_id WHERE l.id=?`,
     )
     .bind(laneId)
     .first<{
       id: string; signoffRequestId: string; status: string; version: number; assignedApproverUserId: string | null;
-      requestStatus: string; requestVersion: number; documentVersionId: string | null; requirementRevisionId: string | null; feasibilityRevisionId: string | null;
+      requestStatus: string; requestVersion: number; documentVersionId: string | null; requirementRevisionId: string | null; feasibilityRevisionId: string | null; releaseId: string | null;
     }>();
   if (!lane) return { kind: "not_found" as const };
   if (lane.assignedApproverUserId !== actor) return { kind: "not_assigned" as const };
@@ -166,7 +195,9 @@ export async function recordSignoffDecision(laneId: string, input: SignoffDecisi
       ? await loadRequirementRevisionSubject(lane.requirementRevisionId)
       : lane.feasibilityRevisionId
         ? await loadFeasibilityRevisionSubject(lane.feasibilityRevisionId)
-        : null;
+        : lane.releaseId
+          ? await loadReleaseSubject(lane.releaseId)
+          : null;
   if (subject?.authorUserId === actor) return { kind: "self_approval_forbidden" as const };
 
   const decisionId = crypto.randomUUID();
@@ -206,8 +237,10 @@ export async function recordSignoffDecision(laneId: string, input: SignoffDecisi
         ? ("REQUIREMENT_REVISION" as const)
         : lane.feasibilityRevisionId
           ? ("FEASIBILITY_REVISION" as const)
-          : null;
-    const subjectId = lane.documentVersionId ?? lane.requirementRevisionId ?? lane.feasibilityRevisionId;
+          : lane.releaseId
+            ? ("RELEASE" as const)
+            : null;
+    const subjectId = lane.documentVersionId ?? lane.requirementRevisionId ?? lane.feasibilityRevisionId ?? lane.releaseId;
     const followUp = [
       env.DB
         .prepare(

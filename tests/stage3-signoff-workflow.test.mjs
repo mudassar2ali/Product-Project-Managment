@@ -117,7 +117,7 @@ test("signoff contract validates request, decision and condition input with boun
 test("signoff repository enforces subject eligibility, assignment, self-approval prevention and aggregate transitions", async () => {
   const source = await read("db/signoffs.ts");
   for (const operation of ["createSignoffRequest", "recordSignoffDecision", "updateSignoffCondition", "getSignoffRequestWorkspace", "listSignoffRequests"]) assert.match(source, new RegExp(operation));
-  assert.match(source, /statusColumn !== "IN_REVIEW"/);
+  assert.match(source, /statusColumn !== eligibleStatusBySubjectType\[input\.subjectType\]/);
   assert.match(source, /not_assigned/);
   assert.match(source, /self_approval_forbidden/);
   assert.match(source, /aggregateSignoffStatus/);

@@ -31,7 +31,7 @@ export async function getLatestReadinessSnapshot(releaseId: string) {
 // or against readiness. A READY test case with zero execution rows still counts, as NOT_EXECUTED,
 // via the COALESCE below, so a never-tested case cannot be dropped from the evidence set.
 async function gatherEvidence(releaseId: string): Promise<ReleaseReadinessEvidence> {
-  const [scope, executions, defectCounts] = await Promise.all([
+  const [scope, executions, defectCounts, signoffRequest] = await Promise.all([
     env.DB.prepare(`
       SELECT s.backlog_item_id backlogItemId, b.status deliveryStatus
       FROM release_scope_items s JOIN backlog_items b ON b.id=s.backlog_item_id
@@ -50,17 +50,28 @@ async function gatherEvidence(releaseId: string): Promise<ReleaseReadinessEviden
       SELECT COUNT(*) total, SUM(CASE WHEN severity='CRITICAL' THEN 1 ELSE 0 END) critical
       FROM defects WHERE release_id=? AND status NOT IN ('CLOSED','DUPLICATE','DEFERRED')
     `).bind(releaseId).first<{ total: number; critical: number | null }>(),
+    // The most recent sign-off request against this Release, regardless of outcome — a Release can
+    // be rejected and re-requested, and readiness always reflects the current (latest) round, never
+    // a stale approval from an earlier one.
+    env.DB.prepare(`
+      SELECT id, status FROM signoff_requests WHERE release_id=? ORDER BY requested_at DESC, id DESC LIMIT 1
+    `).bind(releaseId).first<{ id: string; status: string }>(),
   ]);
+  const openMandatorySignoffConditions = signoffRequest
+    ? (await env.DB.prepare(`
+        SELECT COUNT(*) total FROM signoff_conditions c
+        JOIN signoff_decisions d ON d.id=c.decision_id
+        JOIN signoff_lanes l ON l.id=d.signoff_lane_id
+        WHERE l.signoff_request_id=? AND c.status IN ('OPEN','IN_PROGRESS')
+      `).bind(signoffRequest.id).first<{ total: number }>())?.total ?? 0
+    : 0;
   return {
     scope: scope.results,
     latestExecutionByTestCase: executions.results,
     openDefectCount: defectCounts?.total ?? 0,
     openCriticalDefectCount: defectCounts?.critical ?? 0,
-    // Sign-off is wired in Stage 4 Step 8 (signoff_requests.release_id does not exist yet); until
-    // then readiness is computed as if no sign-off has been requested, which the contract's own
-    // formula already treats as AT_RISK rather than READY — an honest, non-blocking placeholder.
-    signoffStatus: null,
-    openMandatorySignoffConditions: 0,
+    signoffStatus: (signoffRequest?.status as ReleaseReadinessEvidence["signoffStatus"]) ?? null,
+    openMandatorySignoffConditions,
   };
 }
 
