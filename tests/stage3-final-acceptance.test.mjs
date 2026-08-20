@@ -19,7 +19,7 @@ async function migratedDatabase() {
 
 test("all Stage 1, 2 and 3 migrations replay without integrity loss", async () => {
   const { database, files } = await migratedDatabase();
-  assert.equal(files.length, 25);
+  assert.ok(files.length >= 25);
   assert.deepEqual(database.prepare("PRAGMA foreign_key_check").all(), []);
   assert.ok(database.prepare("SELECT COUNT(*) count FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").get().count >= 53);
   assert.equal(database.prepare("SELECT COUNT(*) count FROM sqlite_master WHERE type='trigger' AND name IN('trg_audit_logs_immutable_update','trg_audit_logs_immutable_delete')").get().count, 2);

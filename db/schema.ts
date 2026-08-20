@@ -744,6 +744,47 @@ export const technicalFeasibilityRevisions = sqliteTable("technical_feasibility_
   `),
 ]);
 
+// Stage 4 — Release & UAT Governance, Extended
+
+export const releases = sqliteTable("releases", {
+  id: text("id").primaryKey(),
+  businessId: text("business_id").notNull(),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  releaseType: text("release_type").notNull().default("MINOR"),
+  targetVersion: text("target_version").notNull().default(""),
+  plannedDate: text("planned_date"),
+  status: text("status").notNull().default("PLANNING"),
+  scopeLockedAt: text("scope_locked_at"),
+  releasedAt: text("released_at"),
+  ownerUserId: text("owner_user_id").references(() => users.id, { onDelete: "set null" }),
+  recordStatus: text("record_status").notNull().default("ACTIVE"),
+  version: integer("version").notNull().default(1),
+  ...auditColumns,
+}, (table) => [
+  uniqueIndex("uq_releases_business_id").on(table.businessId),
+  index("idx_releases_project_status").on(table.projectId, table.status),
+  index("idx_releases_planned_date").on(table.plannedDate),
+  check("ck_release_type", sql`${table.releaseType} IN ('MAJOR','MINOR','PATCH','HOTFIX')`),
+  check("ck_release_status", sql`${table.status} IN ('PLANNING','SCOPE_LOCKED','IN_UAT','READY_FOR_SIGNOFF','APPROVED','APPROVED_WITH_CONDITIONS','REJECTED','RELEASED','ROLLED_BACK','CANCELLED')`),
+  check("ck_release_fields", sql`length(trim(${table.name})) BETWEEN 1 AND 200 AND length(${table.targetVersion})<=40 AND ${table.version}>0`),
+  check("ck_release_scope_locked_consistency", sql`${table.scopeLockedAt} IS NULL OR ${table.status} <> 'PLANNING'`),
+  check("ck_release_released_consistency", sql`${table.status} <> 'RELEASED' OR ${table.releasedAt} IS NOT NULL`),
+]);
+
+export const releaseScopeItems = sqliteTable("release_scope_items", {
+  id: text("id").primaryKey(),
+  releaseId: text("release_id").notNull().references(() => releases.id, { onDelete: "cascade" }),
+  backlogItemId: text("backlog_item_id").notNull().references(() => backlogItems.id, { onDelete: "restrict" }),
+  addedAt: text("added_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  removedAt: text("removed_at"),
+  ...auditColumns,
+}, (table) => [
+  uniqueIndex("uq_release_scope_active").on(table.releaseId, table.backlogItemId).where(sql`${table.removedAt} IS NULL`),
+  index("idx_release_scope_backlog_item").on(table.backlogItemId, table.removedAt),
+  index("idx_release_scope_release").on(table.releaseId, table.removedAt),
+]);
+
 export const feasibilityRequirementLinks = sqliteTable("feasibility_requirement_links", {
   id: text("id").primaryKey(),
   assessmentId: text("assessment_id").notNull().references(() => technicalFeasibilityAssessments.id, { onDelete: "restrict" }),
