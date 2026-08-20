@@ -904,3 +904,73 @@ export const uatTestCases = sqliteTable("uat_test_cases", {
     AND ${table.version}>0
   `),
 ]);
+
+// Stage 4 Step 5 — Defects and UAT test executions
+
+export const defects = sqliteTable("defects", {
+  id: text("id").primaryKey(),
+  businessId: text("business_id").notNull(),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "restrict" }),
+  releaseId: text("release_id").references(() => releases.id, { onDelete: "set null" }),
+  source: text("source").notNull().default("UAT"),
+  severity: text("severity").notNull().default("MEDIUM"),
+  status: text("status").notNull().default("OPEN"),
+  title: text("title").notNull(),
+  description: text("description").notNull().default(""),
+  stepsToReproduce: text("steps_to_reproduce").notNull().default(""),
+  reportedByUserId: text("reported_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  assignedToUserId: text("assigned_to_user_id").references(() => users.id, { onDelete: "set null" }),
+  backlogItemId: text("backlog_item_id").references(() => backlogItems.id, { onDelete: "set null" }),
+  duplicateOfId: text("duplicate_of_id").references((): AnySQLiteColumn => defects.id, { onDelete: "restrict" }),
+  reportedAt: text("reported_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  resolvedAt: text("resolved_at"),
+  closedAt: text("closed_at"),
+  version: integer("version").notNull().default(1),
+  ...auditColumns,
+}, (table) => [
+  uniqueIndex("uq_defects_business_id").on(table.businessId),
+  index("idx_defects_project_status_severity").on(table.projectId, table.status, table.severity),
+  index("idx_defects_assignee").on(table.assignedToUserId),
+  index("idx_defects_release").on(table.releaseId),
+  check("ck_defect_source", sql`${table.source} IN ('UAT','QA','PRODUCTION','INTERNAL')`),
+  check("ck_defect_severity", sql`${table.severity} IN ('CRITICAL','HIGH','MEDIUM','LOW')`),
+  check("ck_defect_status", sql`${table.status} IN ('OPEN','IN_PROGRESS','FIXED','VERIFIED','CLOSED','DEFERRED','DUPLICATE')`),
+  check("ck_defect_fields", sql`length(trim(${table.title})) BETWEEN 1 AND 200 AND length(${table.description})<=4000 AND length(${table.stepsToReproduce})<=4000 AND ${table.version}>0`),
+  check("ck_defect_resolution_consistency", sql`
+    (${table.status} IN ('FIXED','VERIFIED','CLOSED') AND ${table.resolvedAt} IS NOT NULL)
+    OR (${table.status} NOT IN ('FIXED','VERIFIED','CLOSED') AND ${table.resolvedAt} IS NULL)
+  `),
+  check("ck_defect_closure_consistency", sql`
+    (${table.status} IN ('CLOSED','DUPLICATE','DEFERRED') AND ${table.closedAt} IS NOT NULL)
+    OR (${table.status} NOT IN ('CLOSED','DUPLICATE','DEFERRED') AND ${table.closedAt} IS NULL)
+  `),
+  check("ck_defect_duplicate_consistency", sql`
+    (${table.status}='DUPLICATE' AND ${table.duplicateOfId} IS NOT NULL)
+    OR (${table.status}<>'DUPLICATE' AND ${table.duplicateOfId} IS NULL)
+  `),
+]);
+
+export const uatTestExecutions = sqliteTable("uat_test_executions", {
+  id: text("id").primaryKey(),
+  testCaseId: text("test_case_id").notNull().references(() => uatTestCases.id, { onDelete: "cascade" }),
+  executionNumber: integer("execution_number").notNull(),
+  result: text("result").notNull(),
+  executedByUserId: text("executed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  executedAt: text("executed_at"),
+  actualResult: text("actual_result").notNull().default(""),
+  evidenceReference: text("evidence_reference").notNull().default(""),
+  defectId: text("defect_id").references(() => defects.id, { onDelete: "set null" }),
+  version: integer("version").notNull().default(1),
+  ...auditColumns,
+}, (table) => [
+  uniqueIndex("uq_uat_test_executions_case_number").on(table.testCaseId, table.executionNumber),
+  index("idx_uat_test_executions_test_case").on(table.testCaseId),
+  index("idx_uat_test_executions_defect").on(table.defectId),
+  check("ck_uat_execution_result", sql`${table.result} IN ('PASS','FAIL','BLOCKED','NOT_EXECUTED')`),
+  check("ck_uat_execution_number", sql`${table.executionNumber}>0`),
+  check("ck_uat_execution_evidence_consistency", sql`
+    (${table.result}<>'NOT_EXECUTED' AND ${table.executedAt} IS NOT NULL AND ${table.executedByUserId} IS NOT NULL)
+    OR (${table.result}='NOT_EXECUTED' AND ${table.executedAt} IS NULL AND ${table.executedByUserId} IS NULL)
+  `),
+  check("ck_uat_execution_fields", sql`length(${table.actualResult})<=4000 AND length(${table.evidenceReference})<=500 AND ${table.version}>0`),
+]);
