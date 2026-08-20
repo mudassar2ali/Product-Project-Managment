@@ -796,3 +796,49 @@ export const feasibilityRequirementLinks = sqliteTable("feasibility_requirement_
   index("idx_feasibility_requirement_links_requirement").on(table.requirementId),
   check("ck_feasibility_requirement_link_fields", sql`length(${table.coverageNote})<=2000`),
 ]);
+
+// Stage 4 Step 3 — Release environments and deployment records
+
+export const releaseEnvironments = sqliteTable("release_environments", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  code: text("code").notNull(),
+  name: text("name").notNull(),
+  tier: text("tier").notNull().default("NON_PROD"),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+  ...auditColumns,
+}, (table) => [
+  uniqueIndex("uq_release_environments_project_code").on(table.projectId, table.code),
+  index("idx_release_environments_project_active").on(table.projectId, table.active),
+  check("ck_release_environment_tier", sql`${table.tier} IN ('NON_PROD','PROD')`),
+  check("ck_release_environment_fields", sql`length(trim(${table.code})) BETWEEN 1 AND 40 AND length(trim(${table.name})) BETWEEN 1 AND 120`),
+]);
+
+export const deploymentRecords = sqliteTable("deployment_records", {
+  id: text("id").primaryKey(),
+  releaseId: text("release_id").notNull().references(() => releases.id, { onDelete: "cascade" }),
+  environmentId: text("environment_id").notNull().references(() => releaseEnvironments.id, { onDelete: "restrict" }),
+  status: text("status").notNull().default("PLANNED"),
+  deployedByUserId: text("deployed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  startedAt: text("started_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  completedAt: text("completed_at"),
+  deploymentReference: text("deployment_reference").notNull().default(""),
+  rollbackOfId: text("rollback_of_id").references((): AnySQLiteColumn => deploymentRecords.id, { onDelete: "restrict" }),
+  notes: text("notes").notNull().default(""),
+  version: integer("version").notNull().default(1),
+  ...auditColumns,
+}, (table) => [
+  index("idx_deployment_records_release_status").on(table.releaseId, table.status),
+  index("idx_deployment_records_environment").on(table.environmentId, table.status),
+  check("ck_deployment_status", sql`${table.status} IN ('PLANNED','IN_PROGRESS','SUCCEEDED','FAILED','ROLLED_BACK')`),
+  check("ck_deployment_completion", sql`
+    (${table.status} IN ('SUCCEEDED','FAILED','ROLLED_BACK') AND ${table.completedAt} IS NOT NULL)
+    OR (${table.status} IN ('PLANNED','IN_PROGRESS') AND ${table.completedAt} IS NULL)
+  `),
+  check("ck_deployment_rollback", sql`
+    (${table.status}='ROLLED_BACK' AND ${table.rollbackOfId} IS NOT NULL)
+    OR (${table.status}<>'ROLLED_BACK' AND ${table.rollbackOfId} IS NULL)
+  `),
+  check("ck_deployment_rollback_not_self", sql`${table.rollbackOfId} IS NULL OR ${table.rollbackOfId}<>${table.id}`),
+  check("ck_deployment_fields", sql`length(${table.deploymentReference})<=500 AND length(${table.notes})<=2000 AND ${table.version}>0`),
+]);
