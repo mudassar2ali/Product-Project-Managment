@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { assertReleaseTransition } from "../app/releases/stage4-contract";
 import type { ReleaseMetadataInput, ReleaseRegistrationInput } from "../app/releases/release-contract";
+import { getLatestReadinessSnapshot } from "./release-readiness";
 
 export type ReleaseRow = {
   id: string; businessId: string; projectId: string; projectName: string;
@@ -64,7 +65,7 @@ async function scopeItemsFor(releaseId: string) {
 export async function getRelease(id: string) {
   const release = await env.DB.prepare(`SELECT ${releaseColumns} FROM releases r JOIN projects pr ON pr.id=r.project_id LEFT JOIN users u ON u.id=r.owner_user_id WHERE r.id=? AND r.record_status='ACTIVE'`).bind(id).first<ReleaseRow>();
   if (!release) return { kind: "not_found" as const };
-  return { kind: "ok" as const, release, scope: await scopeItemsFor(id) };
+  return { kind: "ok" as const, release, scope: await scopeItemsFor(id), readiness: (await getLatestReadinessSnapshot(id)) ?? null };
 }
 
 async function validateProjectScope(projectId: string) {

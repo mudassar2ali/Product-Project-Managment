@@ -30,9 +30,9 @@ test("Step 5 defects schema already established the vocabulary Step 6 governs (r
   assert.match(schema, /ck_defect_status/);
 });
 
-test("all 29 migrations still replay cleanly after Step 6 (no new migration — Step 6 is app-layer only)", async () => {
+test("no migration was added by Step 6 (app-layer only) and all migrations through it still replay cleanly", async () => {
   const { database, files } = await migratedDatabase();
-  assert.equal(files.length, 29);
+  assert.equal(files.filter((name) => Number(name.slice(0, 4)) <= 28).length, 29);
   assert.deepEqual(database.prepare("PRAGMA foreign_key_check").all(), []);
   database.close();
 });

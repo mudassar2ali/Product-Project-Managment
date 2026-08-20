@@ -974,3 +974,36 @@ export const uatTestExecutions = sqliteTable("uat_test_executions", {
   `),
   check("ck_uat_execution_fields", sql`length(${table.actualResult})<=4000 AND length(${table.evidenceReference})<=500 AND ${table.version}>0`),
 ]);
+
+// Stage 4 Step 7 — Release readiness computation and snapshots
+
+export const releaseReadinessSnapshots = sqliteTable("release_readiness_snapshots", {
+  id: text("id").primaryKey(),
+  releaseId: text("release_id").notNull().references(() => releases.id, { onDelete: "cascade" }),
+  sourceRevision: text("source_revision").notNull(),
+  scopeItemCount: integer("scope_item_count").notNull(),
+  scopeDoneCount: integer("scope_done_count").notNull(),
+  uatTestCaseCount: integer("uat_test_case_count").notNull(),
+  uatPassedCount: integer("uat_passed_count").notNull(),
+  uatFailedCount: integer("uat_failed_count").notNull(),
+  uatBlockedCount: integer("uat_blocked_count").notNull(),
+  uatNotExecutedCount: integer("uat_not_executed_count").notNull(),
+  openDefectCount: integer("open_defect_count").notNull(),
+  criticalOpenDefectCount: integer("critical_open_defect_count").notNull(),
+  signoffStatus: text("signoff_status"),
+  readiness: text("readiness").notNull(),
+  formula: text("formula").notNull(),
+  calculatedAt: text("calculated_at").notNull(),
+  ...auditColumns,
+}, (table) => [
+  uniqueIndex("uq_release_readiness_source_revision").on(table.releaseId, table.sourceRevision),
+  index("idx_release_readiness_release_time").on(table.releaseId, table.calculatedAt),
+  check("ck_release_readiness_state", sql`${table.readiness} IN ('READY','AT_RISK','BLOCKED','NOT_READY')`),
+  check("ck_release_readiness_signoff_status", sql`${table.signoffStatus} IS NULL OR ${table.signoffStatus} IN ('PENDING','UNDER_REVIEW','APPROVED','APPROVED_WITH_CONDITIONS','REJECTED')`),
+  check("ck_release_readiness_values", sql`
+    ${table.scopeItemCount}>=0 AND ${table.scopeDoneCount}>=0 AND ${table.scopeDoneCount}<=${table.scopeItemCount}
+    AND ${table.uatTestCaseCount}>=0 AND ${table.uatPassedCount}>=0 AND ${table.uatFailedCount}>=0
+    AND ${table.uatBlockedCount}>=0 AND ${table.uatNotExecutedCount}>=0
+    AND ${table.openDefectCount}>=0 AND ${table.criticalOpenDefectCount}>=0 AND ${table.criticalOpenDefectCount}<=${table.openDefectCount}
+  `),
+]);
