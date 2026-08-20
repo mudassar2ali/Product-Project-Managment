@@ -49,6 +49,26 @@ export function assertDeploymentCompletionConsistent(status: DeploymentStatus, c
 export const uatCampaignStatuses = ["DRAFT", "PLANNED", "IN_PROGRESS", "COMPLETED", "CANCELLED"] as const;
 export type UatCampaignStatus = (typeof uatCampaignStatuses)[number];
 
+const campaignTransitions: Record<UatCampaignStatus, readonly UatCampaignStatus[]> = {
+  DRAFT: ["PLANNED", "CANCELLED"],
+  PLANNED: ["IN_PROGRESS", "DRAFT", "CANCELLED"],
+  IN_PROGRESS: ["COMPLETED", "CANCELLED"],
+  COMPLETED: [],
+  CANCELLED: [],
+};
+
+export function assertCampaignTransition(from: UatCampaignStatus, to: UatCampaignStatus): void {
+  if (from === to) return;
+  if (!campaignTransitions[from].includes(to)) throw new Error("CAMPAIGN_STATUS_TRANSITION_INVALID");
+}
+
+export function assertCampaignTimestampConsistent(status: UatCampaignStatus, startedAt: string | null, completedAt: string | null): void {
+  const needsStarted: readonly UatCampaignStatus[] = ["IN_PROGRESS", "COMPLETED"];
+  const needsCompleted: readonly UatCampaignStatus[] = ["COMPLETED", "CANCELLED"];
+  if (needsStarted.includes(status) !== Boolean(startedAt)) throw new Error("CAMPAIGN_START_EVIDENCE_INVALID");
+  if (needsCompleted.includes(status) !== Boolean(completedAt)) throw new Error("CAMPAIGN_COMPLETION_EVIDENCE_INVALID");
+}
+
 export const testCasePriorities = ["LOW", "MEDIUM", "HIGH", "CRITICAL"] as const;
 export const testCaseStatuses = ["DRAFT", "READY", "RETIRED"] as const;
 export type TestCaseStatus = (typeof testCaseStatuses)[number];

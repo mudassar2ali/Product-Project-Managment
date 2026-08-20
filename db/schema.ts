@@ -842,3 +842,65 @@ export const deploymentRecords = sqliteTable("deployment_records", {
   check("ck_deployment_rollback_not_self", sql`${table.rollbackOfId} IS NULL OR ${table.rollbackOfId}<>${table.id}`),
   check("ck_deployment_fields", sql`length(${table.deploymentReference})<=500 AND length(${table.notes})<=2000 AND ${table.version}>0`),
 ]);
+
+// Stage 4 Step 4 — UAT campaigns and test cases
+
+export const uatCampaigns = sqliteTable("uat_campaigns", {
+  id: text("id").primaryKey(),
+  businessId: text("business_id").notNull(),
+  releaseId: text("release_id").notNull().references(() => releases.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  status: text("status").notNull().default("DRAFT"),
+  entryCriteria: text("entry_criteria").notNull().default(""),
+  exitCriteria: text("exit_criteria").notNull().default(""),
+  plannedStartDate: text("planned_start_date"),
+  plannedEndDate: text("planned_end_date"),
+  startedAt: text("started_at"),
+  completedAt: text("completed_at"),
+  ownerUserId: text("owner_user_id").references(() => users.id, { onDelete: "set null" }),
+  recordStatus: text("record_status").notNull().default("ACTIVE"),
+  version: integer("version").notNull().default(1),
+  ...auditColumns,
+}, (table) => [
+  uniqueIndex("uq_uat_campaigns_business_id").on(table.businessId),
+  index("idx_uat_campaigns_release_status").on(table.releaseId, table.status),
+  check("ck_uat_campaign_status", sql`${table.status} IN ('DRAFT','PLANNED','IN_PROGRESS','COMPLETED','CANCELLED')`),
+  check("ck_uat_campaign_fields", sql`length(trim(${table.name})) BETWEEN 1 AND 200 AND length(${table.entryCriteria})<=4000 AND length(${table.exitCriteria})<=4000 AND ${table.version}>0`),
+  check("ck_uat_campaign_started_consistency", sql`
+    (${table.status} IN ('IN_PROGRESS','COMPLETED') AND ${table.startedAt} IS NOT NULL)
+    OR (${table.status} IN ('DRAFT','PLANNED','CANCELLED') AND ${table.startedAt} IS NULL)
+  `),
+  check("ck_uat_campaign_completed_consistency", sql`
+    (${table.status} IN ('COMPLETED','CANCELLED') AND ${table.completedAt} IS NOT NULL)
+    OR (${table.status} IN ('DRAFT','PLANNED','IN_PROGRESS') AND ${table.completedAt} IS NULL)
+  `),
+]);
+
+export const uatTestCases = sqliteTable("uat_test_cases", {
+  id: text("id").primaryKey(),
+  businessId: text("business_id").notNull(),
+  campaignId: text("campaign_id").notNull().references(() => uatCampaigns.id, { onDelete: "cascade" }),
+  requirementId: text("requirement_id").references(() => requirements.id, { onDelete: "set null" }),
+  backlogItemId: text("backlog_item_id").references(() => backlogItems.id, { onDelete: "set null" }),
+  title: text("title").notNull(),
+  preconditions: text("preconditions").notNull().default(""),
+  steps: text("steps").notNull(),
+  expectedResult: text("expected_result").notNull(),
+  priority: text("priority").notNull().default("MEDIUM"),
+  status: text("status").notNull().default("DRAFT"),
+  version: integer("version").notNull().default(1),
+  ...auditColumns,
+}, (table) => [
+  uniqueIndex("uq_uat_test_cases_business_id").on(table.businessId),
+  index("idx_uat_test_cases_campaign_status").on(table.campaignId, table.status),
+  index("idx_uat_test_cases_requirement").on(table.requirementId),
+  check("ck_uat_test_case_priority", sql`${table.priority} IN ('LOW','MEDIUM','HIGH','CRITICAL')`),
+  check("ck_uat_test_case_status", sql`${table.status} IN ('DRAFT','READY','RETIRED')`),
+  check("ck_uat_test_case_fields", sql`
+    length(trim(${table.title})) BETWEEN 1 AND 200
+    AND length(trim(${table.steps})) BETWEEN 1 AND 8000
+    AND length(trim(${table.expectedResult})) BETWEEN 1 AND 4000
+    AND length(${table.preconditions})<=2000
+    AND ${table.version}>0
+  `),
+]);
