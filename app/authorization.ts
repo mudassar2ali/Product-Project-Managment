@@ -18,6 +18,10 @@ export const permissions = [
   "raci.view", "raci.manage", "raci.publish",
   "feasibility.view", "feasibility.edit", "feasibility.submit",
   "governance.report.view", "governance.report.export",
+  "release.view", "release.create", "release.edit", "release.scope", "release.readiness",
+  "deployment.view", "deployment.record",
+  "uat.view", "uat.create", "uat.edit", "uat.execute",
+  "defect.view", "defect.create", "defect.edit", "defect.close",
   "report.view", "report.export",
   "integration.view", "integration.configure", "integration.sync", "integration.diagnostics",
   "admin.users", "admin.roles", "admin.settings", "audit.view",
@@ -30,6 +34,7 @@ const viewerPermissions: PermissionCode[] = [
   "dashboard.view", "product.view", "project.view", "milestone.view", "raid.view",
   "idea.view", "backlog.view", "sprint.view", "delivery.metrics.view", "report.view", "integration.view",
   "document.view", "requirement.view", "traceability.view", "signoff.view", "raci.view", "feasibility.view", "governance.report.view",
+  "release.view", "uat.view", "defect.view",
 ];
 
 export const rolePermissions = {
@@ -52,6 +57,7 @@ export const rolePermissions = {
     "traceability.manage", "traceability.evidence", "traceability.export",
     "signoff.request", "signoff.decide", "signoff.manage",
     "raci.manage", "raci.publish", "governance.report.export",
+    "release.create", "release.edit", "release.scope", "release.readiness",
   ],
   BUSINESS_ANALYST: [
     ...viewerPermissions, "milestone.create", "milestone.edit", "raid.create", "raid.edit",
@@ -59,16 +65,18 @@ export const rolePermissions = {
     "document.create", "document.edit", "document.version", "document.submit",
     "requirement.create", "requirement.edit", "requirement.archive", "requirement.submit", "requirement.link",
     "traceability.manage", "traceability.evidence", "traceability.export", "signoff.request",
+    "uat.create", "uat.edit",
   ],
   ENGINEERING_LEAD: [
     ...viewerPermissions, "project.edit", "milestone.edit", "raid.create", "raid.edit",
     "backlog.create", "backlog.edit", "sprint.create", "sprint.plan", "sprint.activate", "sprint.complete", "integration.sync",
     "traceability.manage", "signoff.decide", "signoff.manage", "feasibility.edit", "feasibility.submit",
+    "release.edit", "deployment.view", "deployment.record", "defect.edit", "defect.close",
   ],
   DEVELOPER: ["dashboard.view", "product.view", "project.view", "milestone.view", "raid.view", "raid.edit", "integration.view", "requirement.view", "traceability.view", "raci.view", "feasibility.view"],
-  QA: [...viewerPermissions, "project.edit", "raid.create", "raid.edit", "traceability.evidence", "signoff.decide", "signoff.manage"],
-  FINANCE: ["dashboard.view", "product.view", "product.edit", "project.view", "project.edit", "report.view", "report.export", "document.view", "requirement.view", "traceability.view", "signoff.view", "signoff.decide", "signoff.manage", "raci.view", "feasibility.view", "governance.report.view", "governance.report.export"],
-  COMPLIANCE_LEGAL: ["dashboard.view", "product.view", "project.view", "milestone.view", "raid.view", "raid.create", "raid.edit", "idea.view", "report.view", "document.view", "requirement.view", "requirement.create", "requirement.edit", "requirement.submit", "requirement.link", "traceability.view", "signoff.view", "signoff.decide", "signoff.manage", "raci.view", "feasibility.view", "governance.report.view"],
+  QA: [...viewerPermissions, "project.edit", "raid.create", "raid.edit", "traceability.evidence", "signoff.decide", "signoff.manage", "uat.create", "uat.edit", "uat.execute", "defect.create", "defect.edit"],
+  FINANCE: ["dashboard.view", "product.view", "product.edit", "project.view", "project.edit", "report.view", "report.export", "document.view", "requirement.view", "traceability.view", "signoff.view", "signoff.decide", "signoff.manage", "raci.view", "feasibility.view", "governance.report.view", "governance.report.export", "release.view", "uat.view", "defect.view"],
+  COMPLIANCE_LEGAL: ["dashboard.view", "product.view", "project.view", "milestone.view", "raid.view", "raid.create", "raid.edit", "idea.view", "report.view", "document.view", "requirement.view", "requirement.create", "requirement.edit", "requirement.submit", "requirement.link", "traceability.view", "signoff.view", "signoff.decide", "signoff.manage", "raci.view", "feasibility.view", "governance.report.view", "release.view", "uat.view", "defect.view"],
   STAKEHOLDER_APPROVER: [...viewerPermissions, "signoff.decide"],
   EXECUTIVE_VIEWER: viewerPermissions,
 } as const satisfies Record<string, readonly PermissionCode[]>;
