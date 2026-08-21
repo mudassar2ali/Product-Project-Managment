@@ -106,7 +106,7 @@ test("release readiness now reads real sign-off evidence instead of the Step 7 n
   assert.doesNotMatch(source, /signoffStatus: null,\s*\n\s*openMandatorySignoffConditions: 0,/, "the Step 7 hardcoded placeholder must be gone now that signoff_requests.release_id exists");
 });
 
-test("Stage 4 Release navigation and UI remain unexposed after Step 8", async () => {
+test("Stage 4 Release navigation is wired to the Release Center as of Step 10 (this file's own Step 8 unexposed check is superseded)", async () => {
   const shell = await read("app/command-center-shell.tsx");
-  assert.doesNotMatch(shell, /label: "Releases"/);
+  assert.match(shell, /label: "Releases"/);
 });

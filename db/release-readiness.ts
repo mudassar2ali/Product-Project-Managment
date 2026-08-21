@@ -88,6 +88,19 @@ async function hashEvidence(evidence: ReleaseReadinessEvidence) {
   return [...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+// Section 13: "Moving to READY_FOR_SIGNOFF is a user action gated on a fresh readiness snapshot."
+// Freshness means the latest persisted snapshot's source_revision still matches what current
+// evidence would hash to — i.e. nothing has changed (scope, UAT, defects, sign-off) since it was
+// calculated. This reuses gatherEvidence/hashEvidence rather than any separate staleness field,
+// so there is exactly one definition of "current evidence" in the codebase.
+export async function isReadinessSnapshotFresh(releaseId: string): Promise<boolean> {
+  const latest = await getLatestReadinessSnapshot(releaseId);
+  if (!latest) return false;
+  const evidence = await gatherEvidence(releaseId);
+  const sourceRevision = await hashEvidence(evidence);
+  return latest.sourceRevision === sourceRevision;
+}
+
 export async function calculateAndPersistReadiness(releaseId: string, actor: string, correlationId: string) {
   const release = await env.DB.prepare("SELECT id FROM releases WHERE id=? AND record_status='ACTIVE'").bind(releaseId).first<{ id: string }>();
   if (!release) return { kind: "not_found" as const };

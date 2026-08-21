@@ -110,7 +110,7 @@ test("Requirement traceability now surfaces UAT links with their latest executio
   assert.match(source, /uatLinks: uatLinks\.results/);
 });
 
-test("Stage 4 Release navigation and UI remain unexposed after Step 9", async () => {
+test("Stage 4 Release navigation is wired to the Release Center as of Step 10 (this file's own Step 9 unexposed check is superseded)", async () => {
   const shell = await read("app/command-center-shell.tsx");
-  assert.doesNotMatch(shell, /label: "Releases"/);
+  assert.match(shell, /label: "Releases"/);
 });

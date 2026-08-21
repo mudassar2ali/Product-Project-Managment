@@ -114,7 +114,7 @@ test("Release APIs are permission-scoped and use stable no-store responses", asy
   for (const source of [list, detail, scope, scopeItem, lockScope]) assert.match(source, /apiHeaders/);
 });
 
-test("Stage 4 Release navigation and UI remain unexposed after Step 2", async () => {
+test("Stage 4 Release navigation is wired to the Release Center as of Step 10 (this file's own Step 2 unexposed check is superseded)", async () => {
   const shell = await read("app/command-center-shell.tsx");
-  assert.doesNotMatch(shell, /label: "Releases"/);
+  assert.match(shell, /label: "Releases"/);
 });

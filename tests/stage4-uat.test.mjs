@@ -122,7 +122,7 @@ test("UAT campaign and test case APIs are permission-scoped and return stable no
   for (const source of [campaigns, testCases, testCaseDetail]) assert.match(source, /apiHeaders/);
 });
 
-test("Stage 4 Release navigation and UI remain unexposed after Step 4", async () => {
+test("Stage 4 Release navigation is wired to the Release Center as of Step 10 (this file's own Step 4 unexposed check is superseded)", async () => {
   const shell = await read("app/command-center-shell.tsx");
-  assert.doesNotMatch(shell, /label: "Releases"/);
+  assert.match(shell, /label: "Releases"/);
 });

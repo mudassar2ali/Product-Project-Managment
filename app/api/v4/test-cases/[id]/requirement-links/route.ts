@@ -3,6 +3,15 @@ import { validateRequirementUatLinkInput } from "../../../../../releases/uat-con
 
 export const dynamic = "force-dynamic";
 
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const context = await authorizeApi("traceability.view");
+  if (isResponse(context)) return context;
+  const { id } = await params;
+  const { listRequirementUatLinksForTestCase } = await import("../../../../../../db/requirement-uat-links");
+  const items = await listRequirementUatLinksForTestCase(id);
+  return Response.json({ data: items, meta: { correlationId: context.correlationId, timestamp: context.timestamp } }, { headers: apiHeaders(context.correlationId) });
+}
+
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const context = await authorizeApi("traceability.manage");
   if (isResponse(context)) return context;

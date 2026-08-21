@@ -88,7 +88,7 @@ test("the readiness repository scopes UAT evidence to Ready test cases, filters 
 
 test("getRelease now surfaces the latest readiness snapshot, fulfilling the endpoint's own documented contract", async () => {
   const source = await read("db/releases.ts");
-  assert.match(source, /import \{ getLatestReadinessSnapshot \} from "\.\/release-readiness";/);
+  assert.match(source, /import \{ getLatestReadinessSnapshot(?:, \w+)* \} from "\.\/release-readiness";/);
   assert.match(source, /readiness: \(await getLatestReadinessSnapshot\(id\)\) \?\? null/);
 });
 
@@ -100,7 +100,7 @@ test("the readiness API is permission-scoped, recalculates on demand with a defa
   assert.doesNotMatch(source, /status:\s*201/, "a recalculate-and-return action returns the default status, not a resource-creation 201");
 });
 
-test("Stage 4 Release navigation and UI remain unexposed after Step 7", async () => {
+test("Stage 4 Release navigation is wired to the Release Center as of Step 10 (this file's own Step 7 unexposed check is superseded)", async () => {
   const shell = await read("app/command-center-shell.tsx");
-  assert.doesNotMatch(shell, /label: "Releases"/);
+  assert.match(shell, /label: "Releases"/);
 });

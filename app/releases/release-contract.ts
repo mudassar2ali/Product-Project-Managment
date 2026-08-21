@@ -1,4 +1,14 @@
-import { releaseTypes, type ReleaseType } from "./stage4-contract";
+import { releaseStatuses, releaseTypes, type ReleaseStatus, type ReleaseType } from "./stage4-contract";
+
+// The manual-transition targets a person may request through PATCH /api/v4/releases/:id.
+// SCOPE_LOCKED has its own dedicated lock-scope endpoint (which also requires non-empty scope);
+// RELEASED and ROLLED_BACK are automatic side effects of deployment evidence (db/deployments.ts);
+// APPROVED/APPROVED_WITH_CONDITIONS/REJECTED are automatic side effects of sign-off decisions
+// (db/signoffs.ts). None of those five are reachable through this free-form status field — only
+// the four transitions that Section 13 describes as genuine user actions are.
+export const manualReleaseStatusTargets = ["CANCELLED", "PLANNING", "IN_UAT", "READY_FOR_SIGNOFF"] as const;
+
+export type ReleaseStatusTransitionInput = { status: ReleaseStatus };
 
 export type ReleaseRegistrationInput = {
   projectId: string;
@@ -75,4 +85,17 @@ export function validateScopeItemInput(body: unknown): Result<ScopeItemInput> {
   const details: Record<string, string> = {};
   if (!backlogItemId) details.backlogItemId = "Select a Backlog item.";
   return Object.keys(details).length ? { ok: false, details } : { ok: true, value: { backlogItemId } };
+}
+
+export function parseReleaseStatus(value: unknown): ReleaseStatus | null {
+  const candidate = text(value).toUpperCase();
+  return (releaseStatuses as readonly string[]).includes(candidate) ? (candidate as ReleaseStatus) : null;
+}
+
+export function validateReleaseStatusTransitionInput(body: unknown): Result<ReleaseStatusTransitionInput> {
+  const source = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  const status = parseReleaseStatus(source.status);
+  const details: Record<string, string> = {};
+  if (!status || !(manualReleaseStatusTargets as readonly string[]).includes(status)) details.status = "Select a valid Release status to move to.";
+  return Object.keys(details).length ? { ok: false, details } : { ok: true, value: { status: status as ReleaseStatus } };
 }

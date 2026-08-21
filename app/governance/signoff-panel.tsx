@@ -7,7 +7,7 @@ import type { SignoffSubjectType } from "./signoff-contract";
 type Lane = { id: string; signoffRequestId: string; laneType: string; required: boolean; sequence: number; assignedApproverUserId: string | null; status: string; dueAt: string | null; version: number };
 type Decision = { id: string; signoffLaneId: string; decision: string; approverUserId: string; comment: string; decidedAt: string };
 type Condition = { id: string; decisionId: string; description: string; ownerUserId: string | null; dueAt: string | null; status: string; closureEvidence: string; closedBy: string | null; closedAt: string | null; version: number };
-type SignoffRequest = { id: string; documentVersionId: string | null; requirementRevisionId: string | null; feasibilityRevisionId: string | null; status: string; requestedBy: string; requestedAt: string; completedAt: string | null; version: number };
+type SignoffRequest = { id: string; documentVersionId: string | null; requirementRevisionId: string | null; feasibilityRevisionId: string | null; releaseId: string | null; status: string; requestedBy: string; requestedAt: string; completedAt: string | null; version: number };
 type Workspace = { request: SignoffRequest; lanes: Lane[]; decisions: Decision[]; conditions: Condition[] };
 type UserOption = { id: string; displayName: string; email: string };
 type LaneDraft = { laneType: string; required: boolean; assignedApproverUserId: string };

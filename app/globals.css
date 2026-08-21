@@ -248,9 +248,38 @@ h1 { margin: 8px 0 8px; font-family: Georgia, 'Times New Roman', serif; font-siz
 .feasibility-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; margin-top:12px; }
 .requirement-workspace { margin-top:14px; }
 .governance-center { display:grid; gap:0; }
+
+/* Stage 4 — Release & UAT governance. tone-badge is a general-purpose status pill: the tone (not the
+   literal enum value) is picked in JS per field, so one small CSS family covers release/campaign/test
+   case/deployment/defect statuses instead of a bespoke class per enum. */
+.tone-badge { white-space:nowrap; border-radius:99px; padding:5px 7px; font-size:8.5px; font-weight:700; }
+.tone-neutral { color:#4e6558; background:#edf2ef; }
+.tone-positive { color:#21694b; background:#e8f5ee; }
+.tone-warning { color:#886a24; background:#faf1da; }
+.tone-critical { color:white; background:#8e3c34; }
+.release-workspace { margin-top:14px; }
+.release-summary-strip { display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:8px; margin-top:12px; }
+.release-summary-strip>div { padding:11px 12px; border:1px solid #e0e8e3; border-radius:6px; background:#f8faf9; }
+.release-summary-strip span,.release-summary-strip strong { display:block; }
+.release-summary-strip span { color:#77857d; font-size:7px; text-transform:uppercase; letter-spacing:.04em; }
+.release-summary-strip strong { margin-top:4px; font-size:14px; }
+.release-status-actions { display:flex; flex-wrap:wrap; gap:7px; margin-top:12px; }
+.uat-tree { display:grid; grid-template-columns:220px minmax(0,1fr); gap:14px; margin-top:14px; }
+.uat-tree-list { max-height:640px; overflow:auto; border:1px solid #e3eae5; border-radius:6px; }
+.uat-tree-list button { display:block; width:100%; padding:10px 11px; text-align:left; border:0; border-bottom:1px solid #e7ede9; background:white; cursor:pointer; }
+.uat-tree-list button.active { background:#edf5ef; box-shadow:inset 3px 0 var(--brand); }
+.uat-tree-list button span,.uat-tree-list button strong,.uat-tree-list button small { display:block; }
+.uat-tree-list button span { color:#8b742d; font-size:7px; }
+.uat-tree-list button strong { margin-top:3px; font-size:9.5px; }
+.uat-tree-list button small { margin-top:3px; color:#7c8982; font-size:7px; }
+.uat-execution-row { display:grid; grid-template-columns:26px minmax(0,1fr) auto; gap:9px; align-items:start; padding:10px; border:1px solid #e3eae5; border-radius:6px; }
+.uat-execution-row + .uat-execution-row { margin-top:7px; }
+.uat-link-row { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:8px 10px; border:1px solid #e3eae5; border-radius:6px; }
+.uat-link-row + .uat-link-row { margin-top:6px; }
 @media (max-width: 900px) {
   .feasibility-layout { grid-template-columns:1fr; }
   .signoff-lane-row { grid-template-columns:1fr; }
+  .uat-tree { grid-template-columns:1fr; }
 }
 
 .fatal-state { min-height:100vh; display:grid; place-items:center; padding:24px; background:#f4f7f5; }.fatal-state section { max-width:520px; padding:32px; border:1px solid var(--line); border-radius:10px; background:white; box-shadow:0 18px 50px #18312418; }.fatal-state h1 { margin:10px 0; font:500 28px Georgia,serif; }.fatal-state p { color:#66766d; line-height:1.6; }.fatal-state code { display:block; margin:15px 0; padding:10px; border-radius:5px; background:#f1f4f2; color:#526158; font-size:10px; overflow-wrap:anywhere; }.fatal-state a { display:inline-block; margin-top:10px; }

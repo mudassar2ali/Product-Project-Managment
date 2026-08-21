@@ -119,7 +119,7 @@ test("release readiness is computed from evidence and never fabricated", async (
   assert.equal(ready.uatPassedCount, 1);
 });
 
-test("Stage 4 Release navigation is not yet exposed", async () => {
+test("Stage 4 Release navigation is wired to the Release Center as of Step 10 (this file's own Step 1 unexposed check is superseded)", async () => {
   const source = await read("app/command-center-shell.tsx");
-  assert.doesNotMatch(source, /label: "Releases"/);
+  assert.match(source, /label: "Releases"/);
 });

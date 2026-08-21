@@ -3,6 +3,15 @@ import { validateExecutionInput } from "../../../../../releases/uat-execution-co
 
 export const dynamic = "force-dynamic";
 
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const context = await authorizeApi("uat.view");
+  if (isResponse(context)) return context;
+  const { id } = await params;
+  const { listExecutions } = await import("../../../../../../db/uat-executions");
+  const items = await listExecutions(id);
+  return Response.json({ data: items, meta: { correlationId: context.correlationId, timestamp: context.timestamp } }, { headers: apiHeaders(context.correlationId) });
+}
+
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const context = await authorizeApi("uat.execute");
   if (isResponse(context)) return context;

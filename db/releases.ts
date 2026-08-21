@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
-import { assertReleaseTransition } from "../app/releases/stage4-contract";
+import { assertReleaseTransition, type ReleaseStatus } from "../app/releases/stage4-contract";
 import type { ReleaseMetadataInput, ReleaseRegistrationInput } from "../app/releases/release-contract";
-import { getLatestReadinessSnapshot } from "./release-readiness";
+import { getLatestReadinessSnapshot, isReadinessSnapshotFresh } from "./release-readiness";
 
 export type ReleaseRow = {
   id: string; businessId: string; projectId: string; projectName: string;
@@ -140,6 +140,40 @@ export async function removeScopeItem(releaseId: string, backlogItemId: string, 
   ]);
   if (result[0].meta.changes === 0) return { kind: "not_found" as const };
   return { kind: "ok" as const, ...(await getRelease(releaseId)) };
+}
+
+// Manual status transitions a person requests directly (Section 13) — deliberately narrower than
+// every transition assertReleaseTransition permits: SCOPE_LOCKED, RELEASED, ROLLED_BACK, APPROVED,
+// APPROVED_WITH_CONDITIONS and REJECTED are all reached through their own dedicated flow elsewhere
+// (lock-scope, deployment evidence, sign-off decisions) rather than this free-form field — enforced
+// by release-contract.ts's manualReleaseStatusTargets allowlist before this function is ever called.
+export async function transitionReleaseStatus(id: string, targetStatus: ReleaseStatus, expectedVersion: number, actor: string, correlationId: string) {
+  const release = await env.DB.prepare("SELECT id,status FROM releases WHERE id=? AND version=? AND record_status='ACTIVE'").bind(id, expectedVersion).first<{ id: string; status: string }>();
+  if (!release) {
+    const exists = await env.DB.prepare("SELECT id FROM releases WHERE id=? AND record_status='ACTIVE'").bind(id).first<{ id: string }>();
+    return { kind: exists ? ("conflict" as const) : ("not_found" as const) };
+  }
+  try {
+    assertReleaseTransition(release.status as never, targetStatus);
+  } catch {
+    return { kind: "invalid_transition" as const };
+  }
+  if (targetStatus === "IN_UAT" && release.status === "SCOPE_LOCKED") {
+    const campaign = await env.DB.prepare("SELECT id FROM uat_campaigns WHERE release_id=? AND status IN ('PLANNED','IN_PROGRESS') AND record_status='ACTIVE'").bind(id).first<{ id: string }>();
+    if (!campaign) return { kind: "uat_not_started" as const };
+  }
+  if (targetStatus === "READY_FOR_SIGNOFF" && !(await isReadinessSnapshotFresh(id))) return { kind: "readiness_stale" as const };
+  const clearScopeLock = targetStatus === "PLANNING";
+  const sql = clearScopeLock
+    ? "UPDATE releases SET status=?,scope_locked_at=NULL,version=version+1,updated_at=CURRENT_TIMESTAMP,updated_by=? WHERE id=? AND version=? AND record_status='ACTIVE'"
+    : "UPDATE releases SET status=?,version=version+1,updated_at=CURRENT_TIMESTAMP,updated_by=? WHERE id=? AND version=? AND record_status='ACTIVE'";
+  const result = await env.DB.batch([
+    env.DB.prepare(sql).bind(targetStatus, actor, id, expectedVersion),
+    env.DB.prepare(`INSERT INTO audit_logs(id,entity_type,entity_id,action,before_json,after_json,actor_user_id,source,correlation_id) SELECT ?,?,?,?,?,?,?,'APPLICATION',? WHERE EXISTS(SELECT 1 FROM releases WHERE id=? AND status=? AND version=?)`)
+      .bind(crypto.randomUUID(), "Release", id, "STATUS_TRANSITION", JSON.stringify({ from: release.status }), JSON.stringify({ to: targetStatus }), actor, correlationId, id, targetStatus, expectedVersion + 1),
+  ]);
+  if (result[0].meta.changes === 0) return { kind: "conflict" as const };
+  return { kind: "ok" as const, ...(await getRelease(id)) };
 }
 
 export async function lockReleaseScope(releaseId: string, expectedVersion: number, actor: string, correlationId: string) {

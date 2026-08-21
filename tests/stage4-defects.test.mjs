@@ -95,7 +95,7 @@ test("defect APIs are permission-scoped, separate progress updates from terminal
   for (const source of [list, detail, close]) assert.match(source, /apiHeaders/);
 });
 
-test("Stage 4 Release navigation and UI remain unexposed after Step 6", async () => {
+test("Stage 4 Release navigation is wired to the Release Center as of Step 10 (this file's own Step 6 unexposed check is superseded)", async () => {
   const shell = await read("app/command-center-shell.tsx");
-  assert.doesNotMatch(shell, /label: "Releases"/);
+  assert.match(shell, /label: "Releases"/);
 });

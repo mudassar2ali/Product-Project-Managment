@@ -126,7 +126,7 @@ test("UAT execution API is permission-scoped, never accepts a client-supplied ex
   assert.doesNotMatch(contract, /executedByUserId/, "the executor must be derived from the authenticated actor, never accepted from the request body");
 });
 
-test("Stage 4 Release navigation and UI remain unexposed after Step 5", async () => {
+test("Stage 4 Release navigation is wired to the Release Center as of Step 10 (this file's own Step 5 unexposed check is superseded)", async () => {
   const shell = await read("app/command-center-shell.tsx");
-  assert.doesNotMatch(shell, /label: "Releases"/);
+  assert.match(shell, /label: "Releases"/);
 });

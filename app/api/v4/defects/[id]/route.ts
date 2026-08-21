@@ -3,6 +3,16 @@ import { validateDefectProgressInput } from "../../../../releases/defect-contrac
 
 export const dynamic = "force-dynamic";
 
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const context = await authorizeApi("defect.view");
+  if (isResponse(context)) return context;
+  const { id } = await params;
+  const { getDefect } = await import("../../../../../db/defects");
+  const defect = await getDefect(id);
+  if (!defect) return apiError(404, "DEFECT_NOT_FOUND", "Defect was not found.", context.correlationId, context.timestamp);
+  return Response.json({ data: defect, meta: { correlationId: context.correlationId, timestamp: context.timestamp } }, { headers: apiHeaders(context.correlationId) });
+}
+
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const context = await authorizeApi("defect.edit");
   if (isResponse(context)) return context;
