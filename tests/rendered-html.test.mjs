@@ -372,6 +372,36 @@ test("assigns and revokes a role through /api/v5, audit-logs both actions, and r
   assert.equal(revokeAuditRows.results.length, 1);
 });
 
+test("proves the lockout-safety property from the Stage 5 blueprint's test strategy (Section 19): revoking every database-assigned ADMINISTRATOR row for the owner, including their own, still leaves every admin.*-gated route reachable on their next request", async () => {
+  // authorizeApi persists identity after the permission check, so an owner call through it first
+  // guarantees users.id='owner-user-1' exists before this test tries to assign a role to it.
+  await render("/api/v5/administration/roles", true, { headers: ownerHeaders });
+
+  const assign = await render("/api/v5/administration/users/owner-user-1/roles", true, {
+    method: "POST", headers: { ...ownerHeaders, "content-type": "application/json" }, body: JSON.stringify({ roleCode: "ADMINISTRATOR" }),
+  });
+  assert.equal(assign.status, 201);
+  const assignment = (await assign.json()).data.find((row) => row.roleCode === "ADMINISTRATOR");
+  assert.ok(assignment, "the database-assigned ADMINISTRATOR row must exist before it can be revoked");
+
+  const revoke = await render(`/api/v5/administration/users/owner-user-1/roles/${assignment.id}`, true, { method: "DELETE", headers: ownerHeaders });
+  assert.equal(revoke.status, 200);
+  assert.ok(!(await revoke.json()).data.some((row) => row.roleCode === "ADMINISTRATOR"), "the database-assigned row is really gone, not just hidden");
+
+  // The owner has zero database-assigned roles again at this point -- exactly the state Step 1
+  // shipped with -- and the permanent, unconditional override (app/authorization.ts) must still apply.
+  const me = await render("/api/v1/me", true, { headers: ownerHeaders });
+  const meBody = await me.json();
+  assert.ok(meBody.data.roles.includes("ADMINISTRATOR"));
+  assert.ok(meBody.data.permissions.includes("admin.users"));
+  assert.ok(meBody.data.permissions.includes("admin.roles"));
+
+  const usersList = await render("/api/v5/administration/users", true, { headers: ownerHeaders });
+  assert.equal(usersList.status, 200);
+  const rolesList = await render("/api/v5/administration/roles", true, { headers: ownerHeaders });
+  assert.equal(rolesList.status, 200);
+});
+
 test("keeps the shell accessible and the starter preview removed", async () => {
   const [shell, css, page, layout, packageJson] = await Promise.all([
     readFile(new URL("../app/command-center-shell.tsx", import.meta.url), "utf8"),
