@@ -1011,3 +1011,25 @@ export const releaseReadinessSnapshots = sqliteTable("release_readiness_snapshot
     AND ${table.openDefectCount}>=0 AND ${table.criticalOpenDefectCount}>=0 AND ${table.criticalOpenDefectCount}<=${table.openDefectCount}
   `),
 ]);
+
+// Stage 4 Step 9 — Requirement-to-UAT traceability links
+//
+// This is deliberately separate from uat_test_cases.requirement_id (the single, primary requirement
+// a test case is validated against, already set at test-case creation and same-Project-scoped by
+// validateTestCaseLinks in db/uat.ts). requirement_uat_links is the governed many-to-many traceability
+// graph: one Requirement can be validated by many test cases and one test case can validate many
+// Requirements, mirroring how requirement_backlog_links already coexists with backlog_items' own
+// fields. Section 11 of the blueprint specifies no rationale/coverage column and no Project-scope
+// rule for this edge (unlike requirement_backlog_links), so none is invented here.
+export const requirementUatLinks = sqliteTable("requirement_uat_links", {
+  id: text("id").primaryKey(),
+  requirementId: text("requirement_id").notNull().references(() => requirements.id, { onDelete: "restrict" }),
+  uatTestCaseId: text("uat_test_case_id").notNull().references(() => uatTestCases.id, { onDelete: "restrict" }),
+  linkType: text("link_type").notNull().default("VALIDATES"),
+  ...auditColumns,
+}, (table) => [
+  uniqueIndex("uq_requirement_uat_links_edge").on(table.requirementId, table.uatTestCaseId, table.linkType),
+  index("idx_requirement_uat_links_requirement").on(table.requirementId),
+  index("idx_requirement_uat_links_test_case").on(table.uatTestCaseId),
+  check("ck_requirement_uat_link_type", sql`${table.linkType} IN ('VALIDATES')`),
+]);

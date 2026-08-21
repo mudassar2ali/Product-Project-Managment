@@ -196,4 +196,7 @@ export function calculateReleaseReadiness(evidence: ReleaseReadinessEvidence): R
 
 export const signoffReleaseDefaultRequiredLanes = ["PRODUCT", "ENGINEERING", "QA"] as const;
 
+export const requirementUatLinkTypes = ["VALIDATES"] as const;
+export type RequirementUatLinkType = (typeof requirementUatLinkTypes)[number];
+
 export const stage4ContractVersion = "4.0" as const;

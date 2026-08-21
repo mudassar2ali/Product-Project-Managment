@@ -18,7 +18,7 @@ async function loadRequirementScope(id: string) {
 export async function getRequirementTraceability(requirementId: string) {
   const requirement = await loadRequirementScope(requirementId);
   if (!requirement || requirement.recordStatus !== "ACTIVE") return { kind: "not_found" as const };
-  const [outgoing, incoming, backlogLinks, evidence] = await Promise.all([
+  const [outgoing, incoming, backlogLinks, evidence, uatLinks] = await Promise.all([
     env.DB.prepare(`
       SELECT r.id,r.relationship_type relationshipType,r.rationale,r.version,
         t.id targetRequirementId,t.business_id targetBusinessId,rev.title targetTitle
@@ -47,6 +47,25 @@ export async function getRequirementTraceability(requirementId: string) {
         evidence_status evidenceStatus,result,observed_at observedAt,version,updated_at updatedAt
       FROM requirement_evidence_references WHERE requirement_id=? ORDER BY created_at DESC
     `).bind(requirementId).all<EvidenceRow>(),
+    // Stage 4 Step 9 — the Requirement-to-UAT edge, continuing the traceability chain (Section 8:
+    // Requirement -> UAT test case -> execution) past where requirement_backlog_links stops. This is
+    // the many-to-many governed link, distinct from uat_test_cases.requirement_id (the single primary
+    // link a test case is created with); a Requirement can be validated by several test cases here.
+    env.DB.prepare(`
+      SELECT l.id,l.link_type linkType,
+        t.id uatTestCaseId,t.business_id testCaseBusinessId,t.title testCaseTitle,t.status testCaseStatus,
+        c.id campaignId,c.business_id campaignBusinessId,c.name campaignName,
+        rl.id releaseId,rl.business_id releaseBusinessId,rl.name releaseName,
+        latest.result latestExecutionResult
+      FROM requirement_uat_links l
+      JOIN uat_test_cases t ON t.id=l.uat_test_case_id
+      JOIN uat_campaigns c ON c.id=t.campaign_id
+      JOIN releases rl ON rl.id=c.release_id
+      LEFT JOIN uat_test_executions latest
+        ON latest.test_case_id=t.id
+        AND latest.execution_number=(SELECT MAX(execution_number) FROM uat_test_executions WHERE test_case_id=t.id)
+      WHERE l.requirement_id=? ORDER BY l.created_at
+    `).bind(requirementId).all(),
   ]);
   const deliveryStatus = deriveRequirementDeliveryStatus(backlogLinks.results.map((link) => ({
     linkType: link.linkType,
@@ -60,7 +79,7 @@ export async function getRequirementTraceability(requirementId: string) {
     ...record,
     freshness: deriveEvidenceFreshness(record.evidenceStatus as Parameters<typeof deriveEvidenceFreshness>[0], record.observedAt, nowIso),
   }));
-  return { kind: "ok" as const, requirement, outgoing: outgoing.results, incoming: incoming.results, backlogLinks: backlogLinks.results, evidence: evidenceWithFreshness, deliveryStatus };
+  return { kind: "ok" as const, requirement, outgoing: outgoing.results, incoming: incoming.results, backlogLinks: backlogLinks.results, evidence: evidenceWithFreshness, deliveryStatus, uatLinks: uatLinks.results };
 }
 
 export async function addRequirementRelationship(sourceId: string, input: RequirementRelationshipInput, actor: string, correlationId: string) {

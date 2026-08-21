@@ -1,4 +1,4 @@
-import { testCasePriorities, testCaseStatuses, type TestCaseStatus } from "./stage4-contract";
+import { requirementUatLinkTypes, testCasePriorities, testCaseStatuses, type RequirementUatLinkType, type TestCaseStatus } from "./stage4-contract";
 
 export type CampaignRegistrationInput = {
   name: string;
@@ -22,6 +22,11 @@ export type TestCaseRegistrationInput = {
   status: TestCaseStatus;
 };
 
+export type RequirementUatLinkInput = {
+  requirementId: string;
+  linkType: RequirementUatLinkType;
+};
+
 type Result<T> = { ok: true; value: T } | { ok: false; details: Record<string, string> };
 
 const text = (value: unknown) => (typeof value === "string" ? value.trim() : "");
@@ -39,6 +44,22 @@ export function parseTestCasePriority(value: unknown): TestCasePriority | null {
 export function parseTestCaseStatus(value: unknown): TestCaseStatus | null {
   const candidate = text(value).toUpperCase();
   return (testCaseStatuses as readonly string[]).includes(candidate) ? (candidate as TestCaseStatus) : null;
+}
+
+export function parseRequirementUatLinkType(value: unknown): RequirementUatLinkType | null {
+  const candidate = text(value).toUpperCase();
+  return (requirementUatLinkTypes as readonly string[]).includes(candidate) ? (candidate as RequirementUatLinkType) : null;
+}
+
+export function validateRequirementUatLinkInput(body: unknown): Result<RequirementUatLinkInput> {
+  const source = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  const requirementId = identifier(source.requirementId);
+  const requestedType = text(source.linkType);
+  const linkType = requestedType ? parseRequirementUatLinkType(requestedType) : "VALIDATES";
+  const details: Record<string, string> = {};
+  if (!requirementId) details.requirementId = "Select a Requirement.";
+  if (!linkType) details.linkType = "Select a valid link type.";
+  return Object.keys(details).length ? { ok: false, details } : { ok: true, value: { requirementId, linkType: linkType ?? ("VALIDATES" as RequirementUatLinkType) } };
 }
 
 export function validateCampaignRegistrationInput(body: unknown): Result<CampaignRegistrationInput> {
