@@ -138,3 +138,37 @@ export function hasPermission(principal: Principal, permission: PermissionCode):
 export function requirePermission(principal: Principal, permission: PermissionCode): void {
   if (!hasPermission(principal, permission)) throw new AuthorizationError(permission);
 }
+
+// Stage 5 Step 3 -- role-catalog descriptions for the Administration screen (blueprint Section 8/9:
+// "a human-readable permission-group summary... not a live dump of every PermissionCode"). This is
+// display text only, kept in code alongside rolePermissions rather than in a `roles.description`
+// column, matching the ADR that permission-to-role mapping stays in code (blueprint Section 24).
+export const roleDescriptions: Record<RoleCode, string> = {
+  ADMINISTRATOR: "Full access to every capability, including Administration.",
+  PRODUCT_DEVELOPMENT_MANAGER: "Full access to product and delivery capabilities; excludes Administration.",
+  PRODUCT_MANAGER: "Owns Products, Projects, Ideas, Backlog, Sprints, requirements authoring and Release scoping.",
+  BUSINESS_ANALYST: "Authors Requirements, Documents and UAT test cases; manages traceability evidence.",
+  ENGINEERING_LEAD: "Leads delivery execution: Sprints, feasibility, Sign-off decisions, Releases and Deployments.",
+  DEVELOPER: "Working access to assigned RAID items, Requirements, feasibility and traceability -- no create or edit on governance records.",
+  QA: "Owns UAT execution and Defects; manages traceability evidence and decides Sign-offs.",
+  FINANCE: "Views products, projects and governance reporting; decides Sign-offs.",
+  COMPLIANCE_LEGAL: "Views governance evidence, authors Requirements and decides Sign-offs.",
+  STAKEHOLDER_APPROVER: "View-only across the portfolio, with Sign-off decisions.",
+  EXECUTIVE_VIEWER: "View-only across the entire portfolio -- the default for anyone without a database-assigned role.",
+};
+
+const permissionGroupLabels: Record<string, string> = {
+  dashboard: "Dashboard", product: "Product", project: "Project", milestone: "Milestone", raid: "RAID",
+  idea: "Idea", backlog: "Backlog", sprint: "Sprint", delivery: "Delivery metrics", document: "Document",
+  requirement: "Requirement", traceability: "Traceability", signoff: "Sign-off", raci: "RACI",
+  feasibility: "Feasibility", governance: "Governance reporting", release: "Release", deployment: "Deployment",
+  uat: "UAT", defect: "Defect", report: "Report", integration: "Integration", admin: "Administration", audit: "Audit",
+};
+
+// A readable summary of which capability groups a role touches at all (view or better) -- deliberately
+// coarser than the underlying PermissionCode list (blueprint Section 8/9), so the catalog card stays a
+// one-glance summary rather than a permission dump.
+export function summarizePermissionGroups(role: RoleCode): string[] {
+  const groups = new Set(rolePermissions[role].map((permission) => permission.split(".")[0]));
+  return [...groups].map((group) => permissionGroupLabels[group] ?? group).sort();
+}

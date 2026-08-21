@@ -251,6 +251,110 @@ test("resolves a real database role assignment for a non-owner user, and reflect
   assert.deepEqual(revokedBody.data.roles, ["EXECUTIVE_VIEWER"]);
 });
 
+const ownerHeaders = {
+  "oai-authenticated-user-id": "owner-user-1",
+  "oai-authenticated-user-email": "mudassar2ali@gmail.com",
+  "oai-authenticated-user-full-name": "Site%20Owner",
+  "oai-authenticated-user-full-name-encoding": "percent-encoded-utf-8",
+};
+
+test("rejects every /api/v5 Administration route for a caller without admin.users/admin.roles", async () => {
+  const list = await render("/api/v5/administration/users");
+  assert.equal(list.status, 403);
+  const roles = await render("/api/v5/administration/roles");
+  assert.equal(roles.status, 403);
+  const userRoles = await render("/api/v5/administration/users/test-user-1/roles");
+  assert.equal(userRoles.status, 403);
+  const assign = await render("/api/v5/administration/users/test-user-1/roles", true, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ roleCode: "PRODUCT_MANAGER" }),
+  });
+  assert.equal(assign.status, 403);
+  const revoke = await render("/api/v5/administration/users/test-user-1/roles/whatever", true, { method: "DELETE" });
+  assert.equal(revoke.status, 403);
+});
+
+test("lists users and the eleven-role catalog for an Administrator", async () => {
+  const users = await render("/api/v5/administration/users", true, { headers: ownerHeaders });
+  assert.equal(users.status, 200);
+  const usersBody = await users.json();
+  assert.ok(Array.isArray(usersBody.data));
+  assert.equal(usersBody.meta.pageSize, 30);
+
+  const roles = await render("/api/v5/administration/roles", true, { headers: ownerHeaders });
+  assert.equal(roles.status, 200);
+  const rolesBody = await roles.json();
+  assert.equal(rolesBody.data.length, 11);
+  const productManager = rolesBody.data.find((role) => role.code === "PRODUCT_MANAGER");
+  assert.ok(productManager);
+  assert.equal(productManager.name, "Product Manager");
+  assert.ok(productManager.description.length > 0);
+  assert.ok(productManager.permissionGroups.includes("Release"));
+});
+
+test("assigns and revokes a role through /api/v5, audit-logs both actions, and rejects duplicates, unknown users/roles, and cross-user assignment IDs", async () => {
+  const { db } = await getWorker();
+  const userId = "api-target-user-1";
+  await db
+    .prepare(`INSERT INTO users (id, external_user_id, email, display_name, created_by, updated_by) VALUES (?, ?, 'sam.rivera@example.com', 'Sam Rivera', 'SYSTEM', 'SYSTEM')`)
+    .bind(userId, userId)
+    .run();
+
+  const assignToUnknownUser = await render("/api/v5/administration/users/no-such-user/roles", true, {
+    method: "POST", headers: { ...ownerHeaders, "content-type": "application/json" }, body: JSON.stringify({ roleCode: "PRODUCT_MANAGER" }),
+  });
+  assert.equal(assignToUnknownUser.status, 404);
+  assert.equal((await assignToUnknownUser.json()).error.code, "USER_NOT_FOUND");
+
+  const assignInvalidRole = await render(`/api/v5/administration/users/${userId}/roles`, true, {
+    method: "POST", headers: { ...ownerHeaders, "content-type": "application/json" }, body: JSON.stringify({ roleCode: "NOT_A_REAL_ROLE" }),
+  });
+  assert.equal(assignInvalidRole.status, 422);
+  assert.equal((await assignInvalidRole.json()).error.code, "INVALID_ROLE");
+
+  const assign = await render(`/api/v5/administration/users/${userId}/roles`, true, {
+    method: "POST", headers: { ...ownerHeaders, "content-type": "application/json" }, body: JSON.stringify({ roleCode: "PRODUCT_MANAGER" }),
+  });
+  assert.equal(assign.status, 201);
+  const assignBody = await assign.json();
+  assert.equal(assignBody.data.length, 1);
+  assert.equal(assignBody.data[0].roleCode, "PRODUCT_MANAGER");
+  const assignmentId = assignBody.data[0].id;
+
+  const duplicate = await render(`/api/v5/administration/users/${userId}/roles`, true, {
+    method: "POST", headers: { ...ownerHeaders, "content-type": "application/json" }, body: JSON.stringify({ roleCode: "PRODUCT_MANAGER" }),
+  });
+  assert.equal(duplicate.status, 409);
+  assert.equal((await duplicate.json()).error.code, "DUPLICATE_ASSIGNMENT");
+
+  const meAfterAssign = await render("/api/v1/me", true, {
+    headers: { "oai-authenticated-user-id": userId, "oai-authenticated-user-email": "sam.rivera@example.com", "oai-authenticated-user-full-name": "Sam%20Rivera", "oai-authenticated-user-full-name-encoding": "percent-encoded-utf-8" },
+  });
+  assert.deepEqual((await meAfterAssign.json()).data.roles, ["PRODUCT_MANAGER"]);
+
+  const auditRows = await db.prepare("SELECT action, after_json afterJson FROM audit_logs WHERE entity_type='UserRoleAssignment' AND entity_id=?").bind(assignmentId).all();
+  assert.equal(auditRows.results.length, 1);
+  assert.equal(auditRows.results[0].action, "ROLE_ASSIGN");
+  assert.deepEqual(JSON.parse(auditRows.results[0].afterJson), { userId, roleCode: "PRODUCT_MANAGER" });
+
+  const revokeWrongUser = await render(`/api/v5/administration/users/test-user-1/roles/${assignmentId}`, true, { method: "DELETE", headers: ownerHeaders });
+  assert.equal(revokeWrongUser.status, 404);
+  assert.equal((await revokeWrongUser.json()).error.code, "ASSIGNMENT_NOT_FOUND");
+
+  const revoke = await render(`/api/v5/administration/users/${userId}/roles/${assignmentId}`, true, { method: "DELETE", headers: ownerHeaders });
+  assert.equal(revoke.status, 200);
+  assert.deepEqual((await revoke.json()).data, []);
+
+  const meAfterRevoke = await render("/api/v1/me", true, {
+    headers: { "oai-authenticated-user-id": userId, "oai-authenticated-user-email": "sam.rivera@example.com", "oai-authenticated-user-full-name": "Sam%20Rivera", "oai-authenticated-user-full-name-encoding": "percent-encoded-utf-8" },
+  });
+  assert.deepEqual((await meAfterRevoke.json()).data.roles, ["EXECUTIVE_VIEWER"]);
+
+  const revokeAuditRows = await db.prepare("SELECT action FROM audit_logs WHERE entity_type='UserRoleAssignment' AND entity_id=? AND action='ROLE_REVOKE'").bind(assignmentId).all();
+  assert.equal(revokeAuditRows.results.length, 1);
+});
+
 test("keeps the shell accessible and the starter preview removed", async () => {
   const [shell, css, page, layout, packageJson] = await Promise.all([
     readFile(new URL("../app/command-center-shell.tsx", import.meta.url), "utf8"),

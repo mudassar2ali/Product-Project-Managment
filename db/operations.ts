@@ -9,6 +9,7 @@ export const rateLimitPolicies = {
   READINESS_RECALCULATE: { limit: 20, windowSeconds: 300 },
   UAT_EXECUTION_INSERT: { limit: 20, windowSeconds: 300 },
   DEFECT_CREATE: { limit: 20, windowSeconds: 300 },
+  ROLE_ASSIGN: { limit: 20, windowSeconds: 300 },
 } as const;
 
 export type RateLimitedOperation = keyof typeof rateLimitPolicies;
