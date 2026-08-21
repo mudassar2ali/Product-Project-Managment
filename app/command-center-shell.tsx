@@ -116,8 +116,8 @@ export function CommandCenterShell({ principal }: { principal: Principal }) {
         </nav>
 
         <div className="sidebar-footer">
-          <div className="build-status"><span aria-hidden="true" /> Stage 3 build</div>
-          <p>BRD &amp; PRD authoring active</p>
+          <div className="build-status"><span aria-hidden="true" /> Stage 5 build</div>
+          <p>Role &amp; access administration active</p>
         </div>
       </aside>
 

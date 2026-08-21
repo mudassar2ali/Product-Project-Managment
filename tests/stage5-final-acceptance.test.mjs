@@ -33,6 +33,9 @@ test("all Stage 1 through Stage 5 migrations replay without integrity loss, seed
 
 test("navigation exposes Administration as the one authorized Stage 5 entry point, with no future module leaking early", async () => {
   const shell = await read("app/command-center-shell.tsx");
+  assert.match(shell, /Stage 5 build/);
+  assert.match(shell, /Role &amp; access administration active/);
+  assert.doesNotMatch(shell, /Stage 3 build/);
   for (const label of [
     "Dashboard", "Products", "Projects", "Backlog", "Sprints", "BRD / PRD", "Requirements", "Releases",
     "Milestones", "Ideas", "RAID", "Reports", "Integrations", "Audit Trail", "Administration",

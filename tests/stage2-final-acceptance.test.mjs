@@ -35,8 +35,8 @@ test("release navigation preserves Stage 2 capability and keeps unauthorized fut
   // entry here was still deferred as of Stage 5 and stays checked.
   for (const deferred of ["Market Intelligence", "TAM", "SAM", "SOM", "Financial", "Scorecards", "Release Management", "AI Assistant"]) assert.doesNotMatch(shell, new RegExp(`label: "${deferred}"`));
   for (const stale of ["Search and notifications are scheduled", "The command center shell is ready", "1 of 18 in progress"]) assert.doesNotMatch(shell, new RegExp(stale));
-  assert.match(shell, /Stage 3 build/);
-  assert.match(shell, /BRD &amp; PRD authoring active/);
+  assert.match(shell, /Stage 5 build/);
+  assert.match(shell, /Role &amp; access administration active/);
 });
 
 test("Stage 2 API surface covers Backlog Story dependency Sprint metric Azure and operations contracts", async () => {
