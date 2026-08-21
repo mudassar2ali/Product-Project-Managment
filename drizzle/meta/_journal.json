@@ -225,6 +225,13 @@
       "when": 1787256289293,
       "tag": "0031_same_gargoyle",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1787315853349,
+      "tag": "0032_stage5_role_assignment_global_scope",
+      "breakpoints": true
     }
   ]
 }

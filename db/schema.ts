@@ -59,6 +59,12 @@ export const userRoleAssignments = sqliteTable("user_role_assignments", {
   uniqueIndex("uq_user_role_scope").on(table.userId, table.roleId, table.scopeType, table.scopeId),
   index("idx_user_role_assignments_user").on(table.userId),
   index("idx_user_role_assignments_role_scope").on(table.roleId, table.scopeType, table.scopeId),
+  // Stage 5 Step 1 — project-scoped assignment remains a deliberately deferred future capability
+  // (Stage 5 blueprint Section 3/10); every row this stage's own write path ever produces is
+  // GLOBAL/*, and this constraint makes that a database-enforced fact rather than only an
+  // application convention, while leaving the columns themselves free for a future stage to
+  // relax this constraint if project-scoped assignment is ever built.
+  check("ck_user_role_assignment_scope_global", sql`${table.scopeType}='GLOBAL' AND ${table.scopeId}='*'`),
 ]);
 
 export const businessSequences = sqliteTable("business_sequences", {
