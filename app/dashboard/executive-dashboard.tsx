@@ -8,6 +8,13 @@ type Delivery = {
   attention: Array<{ kind: string; businessId: string; title: string; signal: string; dueDate: string | null; destination: string }>;
 };
 
+type Stage4 = {
+  releases: { available: boolean; reason?: string; total?: number; ready?: number; atRisk?: number; blocked?: number; notReady?: number };
+  uat: { available: boolean; reason?: string; totalTestCases?: number; passed?: number; passRate?: number | null; activeCampaigns?: number };
+  defects: { available: boolean; reason?: string; openTotal?: number; openCritical?: number };
+  signoffs: { available: boolean; reason?: string; pending?: number };
+};
+
 type DashboardData = {
   portfolio: { products: number; projects: number };
   health: { onTrack: number; atRisk: number; critical: number };
@@ -16,6 +23,7 @@ type DashboardData = {
   ideas: { total: number; approved: number; review: number };
   progress: { avgProgress: number; avgDevelopment: number };
   delivery: Delivery;
+  stage4: Stage4;
   attention: Array<{ kind: string; businessId: string; title: string; signal: string; dueDate: string | null; destination: string }>;
   calculatedAt: string;
 };
@@ -40,13 +48,15 @@ export function ExecutiveDashboard({ navigate, availableModules }: { navigate: (
   const canNavigate = (module: string) => availableModules.includes(module);
   const open = (module: string) => { if (canNavigate(module)) navigate(module); };
   const deliveryAttention = data.delivery.attention.length;
+  const stage4Attention = (data.stage4.releases.available ? (data.stage4.releases.blocked ?? 0) : 0) + (data.stage4.defects.available ? (data.stage4.defects.openCritical ?? 0) : 0);
   const cards = [
     ["Products", data.portfolio.products, "Products"],
     ["Projects", data.portfolio.projects, "Projects"],
     ["Average progress", `${data.progress.avgProgress}%`, "Projects"],
-    ["Needs attention", data.health.atRisk + data.health.critical + data.milestones.overdue + data.raid.attention + deliveryAttention, "RAID"],
+    ["Needs attention", data.health.atRisk + data.health.critical + data.milestones.overdue + data.raid.attention + deliveryAttention + stage4Attention, "RAID"],
     ...(data.delivery.backlog.available ? [["Backlog items", data.delivery.backlog.total ?? 0, "Backlog"]] : []),
     ...(data.delivery.sprints.available ? [["Active Sprints", data.delivery.sprints.current?.active ?? 0, "Sprints"]] : []),
+    ...(data.stage4.releases.available ? [["Releases in flight", data.stage4.releases.total ?? 0, "Releases"]] : []),
   ] as Array<[string, string | number, string]>;
 
   return <div className="executive-dashboard">
@@ -71,6 +81,7 @@ export function ExecutiveDashboard({ navigate, availableModules }: { navigate: (
       </article>
     </section>
     <PortfolioDeliveryPulse delivery={data.delivery} open={open} canNavigate={canNavigate} />
+    <Stage4Pulse stage4={data.stage4} open={open} canNavigate={canNavigate} />
     <section className="dashboard-panel attention-panel">
       <div className="panel-title"><div><span className="section-kicker">MANAGEMENT ATTENTION</span><h2>Exceptions requiring action</h2></div><span>Calculated {new Date(data.calculatedAt).toLocaleString()}</span></div>
       {!data.attention.length ? <div className="module-state compact-state"><strong>No current exceptions</strong><p>At-risk Projects, delivery blockers, open Bugs, unhealthy Sprints, overdue milestones and critical RAID items appear here.</p></div> : <div className="attention-table">{data.attention.map((item, index) => <button key={item.businessId + index} onClick={() => open(item.destination)} disabled={!canNavigate(item.destination)}><b>{item.kind}</b><div><strong>{item.title}</strong><span>{item.businessId}{item.dueDate ? ` · ${item.dueDate}` : ""}</span></div><em>{item.signal}</em><span>{canNavigate(item.destination) ? "Open →" : "Summary"}</span></button>)}</div>}
@@ -96,6 +107,30 @@ function PortfolioDeliveryPulse({ delivery, open, canNavigate }: { delivery: Del
         <Metric label="Average completion" value={delivery.sprints.current?.averageProgress === null || delivery.sprints.current?.averageProgress === undefined ? "—" : `${delivery.sprints.current.averageProgress}%`} detail="Active metric snapshots" />
         <Metric label="Velocity" value={delivery.sprints.history?.velocityAverage ?? "—"} detail={`${delivery.sprints.history?.evidenceSprints ?? 0} completed Sprints`} />
         <Metric label="Carryover" value={delivery.sprints.history?.carryoverCount ?? 0} detail={`${delivery.sprints.history?.carryoverPoints ?? 0} points`} attention={Number(delivery.sprints.history?.carryoverCount ?? 0) > 0} />
+      </div>}
+    </article>
+  </section>;
+}
+
+function Stage4Pulse({ stage4, open, canNavigate }: { stage4: Stage4; open: (module: string) => void; canNavigate: (module: string) => boolean }) {
+  return <section className="portfolio-delivery-grid" aria-label="Stage 4 Release and UAT governance evidence">
+    <article className="dashboard-panel">
+      <div className="panel-title"><div><span className="section-kicker">STAGE 4 RELEASES</span><h2>Release readiness</h2></div>{stage4.releases.available && <button onClick={() => open("Releases")} disabled={!canNavigate("Releases")}>Open Releases →</button>}</div>
+      {!stage4.releases.available ? <Unavailable reason={stage4.releases.reason} /> : <div className="delivery-pulse-metrics">
+        <Metric label="In flight" value={stage4.releases.total ?? 0} detail="Not yet Released, Rolled back or Cancelled" />
+        <Metric label="Ready" value={stage4.releases.ready ?? 0} detail="Latest readiness snapshot" />
+        <Metric label="At risk" value={stage4.releases.atRisk ?? 0} detail="Latest readiness snapshot" attention={Number(stage4.releases.atRisk ?? 0) > 0} />
+        <Metric label="Blocked" value={stage4.releases.blocked ?? 0} detail="Latest readiness snapshot" attention={Number(stage4.releases.blocked ?? 0) > 0} />
+      </div>}
+    </article>
+    <article className="dashboard-panel">
+      <div className="panel-title"><div><span className="section-kicker">STAGE 4 UAT &amp; DEFECTS</span><h2>Verification pulse</h2></div>{stage4.uat.available && <button onClick={() => open("Releases")} disabled={!canNavigate("Releases")}>Open Releases →</button>}</div>
+      {!stage4.uat.available && !stage4.defects.available ? <Unavailable reason={stage4.uat.reason ?? stage4.defects.reason} /> : <div className="delivery-pulse-metrics">
+        {stage4.uat.available && <Metric label="UAT pass rate" value={stage4.uat.passRate === null || stage4.uat.passRate === undefined ? "—" : `${stage4.uat.passRate}%`} detail={`${stage4.uat.passed ?? 0} of ${stage4.uat.totalTestCases ?? 0} Ready cases`} />}
+        {stage4.uat.available && <Metric label="Active campaigns" value={stage4.uat.activeCampaigns ?? 0} detail="Planned or In Progress" />}
+        {stage4.defects.available && <Metric label="Open defects" value={stage4.defects.openTotal ?? 0} detail="Not Closed, Duplicate or Deferred" />}
+        {stage4.defects.available && <Metric label="Critical open" value={stage4.defects.openCritical ?? 0} detail="Requires attention" attention={Number(stage4.defects.openCritical ?? 0) > 0} />}
+        {stage4.signoffs.available && <Metric label="Pending sign-offs" value={stage4.signoffs.pending ?? 0} detail="Release approval lanes" attention={Number(stage4.signoffs.pending ?? 0) > 0} />}
       </div>}
     </article>
   </section>;

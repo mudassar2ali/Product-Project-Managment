@@ -93,7 +93,7 @@ test("audit trail exposes Stage 3 governance entity types and actions for filter
 
 test("db/governance-overview.ts composes a permission-gated governance summary for the Project Overview", async () => {
   const source = await read("db/governance-overview.ts");
-  assert.match(source, /export type GovernanceOverviewAccess = \{ documents: boolean; requirements: boolean; signoffs: boolean; raci: boolean; feasibility: boolean \}/);
+  assert.match(source, /export type GovernanceOverviewAccess = \{ documents: boolean; requirements: boolean; signoffs: boolean; raci: boolean; feasibility: boolean(?:; \w+: boolean)* \}/);
   assert.match(source, /export async function getProjectGovernanceSummary/);
   assert.match(source, /getPortfolioTraceability/);
   for (const key of ["documents", "requirements", "signoffs", "raci", "feasibility"]) assert.match(source, new RegExp(`${key}:`));

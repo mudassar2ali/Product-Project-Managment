@@ -261,6 +261,41 @@ export const reportDefinitions = {
     sql: `SELECT a.business_id ID,pr.name Project,COALESCE(bi.title,'—') Feature,COALESCE(u.display_name,'Unassigned') Owner,COALESCE(rev.status,'—') Status,COALESCE(NULLIF(rev.recommendation,''),'—') Recommendation,CASE WHEN rev.engineering_estimate IS NOT NULL THEN rev.engineering_estimate||' '||LOWER(rev.estimate_unit) ELSE '—' END Estimate,COALESCE((SELECT COUNT(*) FROM signoff_conditions c JOIN signoff_decisions dec ON dec.id=c.decision_id JOIN signoff_lanes l ON l.id=dec.signoff_lane_id JOIN signoff_requests sr ON sr.id=l.signoff_request_id WHERE sr.feasibility_revision_id=rev.id AND c.status='OPEN'),0) 'Open Conditions',a.updated_at Updated FROM technical_feasibility_assessments a JOIN projects pr ON pr.id=a.project_id LEFT JOIN backlog_items bi ON bi.id=a.backlog_feature_id LEFT JOIN users u ON u.id=a.owner_user_id LEFT JOIN technical_feasibility_revisions rev ON rev.id=(SELECT cv.id FROM technical_feasibility_revisions cv WHERE cv.assessment_id=a.id ORDER BY ${feasibilityRevisionOrder} LIMIT 1) WHERE a.record_status='ACTIVE' ORDER BY pr.name,a.business_id`,
     sourceFreshness: "Current persisted records",
   },
+  "release-portfolio-status": {
+    title: "Release Portfolio Status and Readiness",
+    description: "Every governed Release with its current status, target version and latest readiness snapshot.",
+    columns: ["ID", "Release", "Project", "Type", "Status", "Readiness", "Target Version", "Planned Date", "Owner"],
+    sql: `SELECT r.business_id ID,r.name Release,pr.name Project,r.release_type Type,r.status Status,COALESCE((SELECT rs.readiness FROM release_readiness_snapshots rs WHERE rs.release_id=r.id ORDER BY rs.calculated_at DESC,rs.id DESC LIMIT 1),'NOT_CALCULATED') Readiness,COALESCE(NULLIF(r.target_version,''),'—') 'Target Version',COALESCE(r.planned_date,'—') 'Planned Date',COALESCE(u.display_name,'Unassigned') Owner FROM releases r JOIN projects pr ON pr.id=r.project_id LEFT JOIN users u ON u.id=r.owner_user_id WHERE r.record_status='ACTIVE' ORDER BY pr.name,r.business_id`,
+    sourceFreshness: "Current persisted records and latest readiness snapshot",
+  },
+  "release-scope-delivery": {
+    title: "Release Scope vs Delivery Status",
+    description: "Backlog items scoped into a Release, with whether their delivery status is actually Done.",
+    columns: ["Release", "Project", "Backlog Item", "Type", "Delivery Status", "Done"],
+    sql: `SELECT r.business_id Release,pr.name Project,b.business_id 'Backlog Item',b.item_type Type,b.delivery_state 'Delivery Status',CASE WHEN b.status='DONE' THEN 'Yes' ELSE 'No' END Done FROM release_scope_items s JOIN releases r ON r.id=s.release_id JOIN projects pr ON pr.id=r.project_id JOIN backlog_items b ON b.id=s.backlog_item_id WHERE s.removed_at IS NULL AND r.record_status='ACTIVE' ORDER BY pr.name,r.business_id,b.business_id`,
+    sourceFreshness: "Current active Release scope",
+  },
+  "uat-execution-pass-rate": {
+    title: "UAT Execution and Pass-Rate Report",
+    description: "Test case counts and the latest-execution pass rate for every UAT campaign, by Release.",
+    columns: ["Campaign", "Release", "Project", "Status", "Test Cases", "Passed", "Failed", "Blocked", "Not Executed", "Pass Rate"],
+    sql: `SELECT c.business_id Campaign,r.business_id Release,pr.name Project,c.status Status,COUNT(t.id) 'Test Cases',COALESCE(SUM(CASE WHEN latest.result='PASS' THEN 1 ELSE 0 END),0) Passed,COALESCE(SUM(CASE WHEN latest.result='FAIL' THEN 1 ELSE 0 END),0) Failed,COALESCE(SUM(CASE WHEN latest.result='BLOCKED' THEN 1 ELSE 0 END),0) Blocked,COALESCE(SUM(CASE WHEN latest.result IS NULL OR latest.result='NOT_EXECUTED' THEN 1 ELSE 0 END),0) 'Not Executed',CASE WHEN COUNT(t.id)=0 THEN '—' ELSE ROUND(100.0*COALESCE(SUM(CASE WHEN latest.result='PASS' THEN 1 ELSE 0 END),0)/COUNT(t.id))||'%' END 'Pass Rate' FROM uat_campaigns c JOIN releases r ON r.id=c.release_id JOIN projects pr ON pr.id=r.project_id LEFT JOIN uat_test_cases t ON t.campaign_id=c.id LEFT JOIN uat_test_executions latest ON latest.test_case_id=t.id AND latest.execution_number=(SELECT MAX(execution_number) FROM uat_test_executions WHERE test_case_id=t.id) WHERE c.record_status='ACTIVE' GROUP BY c.id,c.business_id,r.business_id,pr.name,c.status ORDER BY pr.name,r.business_id,c.business_id`,
+    sourceFreshness: "Current campaigns and latest execution per test case",
+  },
+  "defect-aging-severity": {
+    title: "Defect Aging, Severity and Status Report",
+    description: "Every recorded defect with its severity, current status and age since it was reported.",
+    columns: ["ID", "Title", "Project", "Release", "Source", "Severity", "Status", "Age (days)", "Reported", "Resolved"],
+    sql: `SELECT d.business_id ID,d.title Title,pr.name Project,COALESCE(r.business_id,'—') Release,d.source Source,d.severity Severity,d.status Status,CAST(ROUND(julianday(COALESCE(d.closed_at,'now'))-julianday(d.reported_at)) AS INTEGER) 'Age (days)',d.reported_at Reported,COALESCE(d.resolved_at,'—') Resolved FROM defects d JOIN projects pr ON pr.id=d.project_id LEFT JOIN releases r ON r.id=d.release_id ORDER BY CASE d.severity WHEN 'CRITICAL' THEN 0 WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 ELSE 3 END,d.reported_at DESC`,
+    sourceFreshness: "Current persisted records",
+  },
+  "deployment-history-rollback": {
+    title: "Deployment History and Rollback Report",
+    description: "Every recorded deployment attempt by Release and environment, including rollback linkage.",
+    columns: ["Release", "Project", "Environment", "Tier", "Status", "Deployed By", "Started", "Completed", "Reference", "Rollback Of"],
+    sql: `SELECT r.business_id Release,pr.name Project,e.name Environment,e.tier Tier,d.status Status,COALESCE(u.display_name,'Unattributed') 'Deployed By',d.started_at Started,COALESCE(d.completed_at,'—') Completed,COALESCE(NULLIF(d.deployment_reference,''),'—') Reference,CASE WHEN d.rollback_of_id IS NOT NULL THEN COALESCE(NULLIF(ro.deployment_reference,''),'Deployment '||substr(ro.id,1,8)) ELSE '—' END 'Rollback Of' FROM deployment_records d JOIN releases r ON r.id=d.release_id JOIN projects pr ON pr.id=r.project_id JOIN release_environments e ON e.id=d.environment_id LEFT JOIN users u ON u.id=d.deployed_by_user_id LEFT JOIN deployment_records ro ON ro.id=d.rollback_of_id ORDER BY pr.name,r.business_id,d.started_at DESC`,
+    sourceFreshness: "Current persisted records",
+  },
 } as const satisfies Record<string, ReportDefinition>;
 
 export type ReportKey = keyof typeof reportDefinitions;
@@ -386,6 +421,35 @@ function buildSummary(key: ReportKey, rows: ReportRow[]): SummaryItem[] {
     { label: "Feasible", value: rows.filter((row) => ["FEASIBLE", "FEASIBLE_WITH_CONDITIONS"].includes(String(row.Status))).length, detail: "Current revision recommends feasible" },
     { label: "Not feasible", value: rows.filter((row) => row.Status === "NOT_FEASIBLE").length, detail: "Current revision recommends not feasible" },
     { label: "Open conditions", value: sum("Open Conditions"), detail: "Outstanding sign-off conditions" },
+  ];
+  if (key === "release-portfolio-status") return [
+    { label: "Releases", value: rows.length, detail: "Active Release records" },
+    { label: "Ready", value: rows.filter((row) => row.Readiness === "READY").length, detail: "Latest readiness snapshot" },
+    { label: "At risk", value: rows.filter((row) => row.Readiness === "AT_RISK").length, detail: "Latest readiness snapshot" },
+    { label: "Blocked", value: rows.filter((row) => row.Readiness === "BLOCKED").length, detail: "Latest readiness snapshot" },
+  ];
+  if (key === "release-scope-delivery") return [
+    { label: "Scope items", value: rows.length, detail: "Active Release scope rows" },
+    { label: "Done", value: rows.filter((row) => row.Done === "Yes").length, detail: "Backlog item delivery status is Done" },
+    { label: "Not done", value: rows.filter((row) => row.Done === "No").length, detail: "Still in delivery" },
+  ];
+  if (key === "uat-execution-pass-rate") return [
+    { label: "Campaigns", value: rows.length, detail: "Active UAT campaigns" },
+    { label: "Test cases", value: sum("Test Cases"), detail: "Across all visible campaigns" },
+    { label: "Passed", value: sum("Passed"), detail: "Latest execution per test case" },
+    { label: "Failed / Blocked", value: sum("Failed") + sum("Blocked"), detail: "Requires attention" },
+  ];
+  if (key === "defect-aging-severity") return [
+    { label: "Defects", value: rows.length, detail: "All recorded defects" },
+    { label: "Open", value: rows.filter((row) => !["CLOSED", "DUPLICATE", "DEFERRED"].includes(String(row.Status))).length, detail: "Not Closed, Duplicate or Deferred" },
+    { label: "Critical", value: rows.filter((row) => row.Severity === "CRITICAL").length, detail: "Highest severity" },
+    { label: "Average age (days)", value: average("Age (days)"), detail: "Across all visible defects" },
+  ];
+  if (key === "deployment-history-rollback") return [
+    { label: "Deployments", value: rows.length, detail: "All recorded deployment attempts" },
+    { label: "Succeeded", value: rows.filter((row) => row.Status === "SUCCEEDED").length, detail: "Completed successfully" },
+    { label: "Rolled back", value: rows.filter((row) => row.Status === "ROLLED_BACK").length, detail: "Reverted deployments" },
+    { label: "Failed", value: rows.filter((row) => row.Status === "FAILED").length, detail: "Unsuccessful attempts" },
   ];
   return [];
 }

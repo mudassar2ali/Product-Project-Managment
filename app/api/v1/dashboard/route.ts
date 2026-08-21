@@ -13,6 +13,11 @@ export async function GET() {
       backlog: context.principal.permissions.includes("backlog.view"),
       sprints: context.principal.permissions.includes("sprint.view"),
       metrics: context.principal.permissions.includes("delivery.metrics.view"),
+    }, {
+      releases: context.principal.permissions.includes("release.view"),
+      uat: context.principal.permissions.includes("uat.view"),
+      defects: context.principal.permissions.includes("defect.view"),
+      signoffs: context.principal.permissions.includes("signoff.view"),
     });
     const { recordOperationalEvent } = await import("../../../../db/operations");
     await recordOperationalEvent({ operation:"DASHBOARD_QUERY",outcome:"SUCCESS",statusCode:200,durationMs:Date.now()-startedAt,actorUserId:context.principal.user.userId,correlationId:context.correlationId,entityType:"Dashboard",details:{ attentionItems:data.attention.length } });

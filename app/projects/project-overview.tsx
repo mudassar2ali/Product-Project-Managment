@@ -16,6 +16,7 @@ type GovernanceEvidenceSummary = {
   signoffs:{available:boolean;reason?:string;pending?:number;openConditions?:number};
   raci:{available:boolean;reason?:string;matrix?:{id:string;title:string;status:string}|null;totalActivities?:number;gapCount?:number};
   feasibility:{available:boolean;reason?:string;total?:number;feasible?:number;notFeasible?:number;inReview?:number};
+  releases:{available:boolean;reason?:string;total?:number;ready?:number;atRisk?:number;blocked?:number;openDefects?:number;openCriticalDefects?:number};
 };
 type Overview = { project:Project;governance:GovernanceEvidenceSummary;stageProgress:Array<{stage:string;completion:number;weight:number;weightedContribution:number;source:string}>;delivery:{connected:boolean;provider:string|null;connectionName?:string;organization?:string;azureProjectName?:string;azureTeamName?:string|null;lastValidatedAt?:string|null;validationStatus?:string;lastSync:null};relatedModules:{milestones:{available:boolean;reason?:string|null;items?:Array<{id:string;status:string;overdue:number}>};raid:{available:boolean;total?:number;attention?:number}};deliveryInsights:DeliveryInsights;activity:Array<{action:string;source:string;correlationId:string;occurredAt:string}>;calculatedAt:string };
 
@@ -52,7 +53,7 @@ function RelatedEvidence({ overview }: { overview: Overview }) {
 }
 
 function GovernanceEvidence({ governance }: { governance: GovernanceEvidenceSummary }) {
-  const anyAvailable = governance.documents.available || governance.requirements.available || governance.signoffs.available || governance.raci.available || governance.feasibility.available;
+  const anyAvailable = governance.documents.available || governance.requirements.available || governance.signoffs.available || governance.raci.available || governance.feasibility.available || governance.releases.available;
   if (!anyAvailable) return null;
   return <section className="overview-section governance-summary"><div className="overview-section-title"><div><span className="section-kicker">STAGE 3 GOVERNANCE</span><h3>BRD/PRD, requirements and sign-off attention</h3></div><span>Shown only for permissions you hold</span></div><div className="related-evidence-grid governance-evidence-grid">
     {governance.documents.available ? <article><span>BRD / PRD</span><strong>{governance.documents.items?.length ?? 0}</strong><small>{(governance.documents.items ?? []).map((item) => `${item.documentType} ${item.lifecycleStatus ?? "—"}`).join(" · ") || "No governed documents"}</small></article> : <EvidenceUnavailable reason={governance.documents.reason} />}
@@ -60,6 +61,7 @@ function GovernanceEvidence({ governance }: { governance: GovernanceEvidenceSumm
     {governance.signoffs.available ? <article><span>Sign-offs</span><strong>{governance.signoffs.pending ?? 0}</strong><small>Pending lanes · {governance.signoffs.openConditions ?? 0} open conditions</small></article> : <EvidenceUnavailable reason={governance.signoffs.reason} />}
     {governance.raci.available ? <article><span>RACI completeness</span><strong>{governance.raci.matrix ? `${(governance.raci.totalActivities ?? 0) - (governance.raci.gapCount ?? 0)}/${governance.raci.totalActivities ?? 0}` : "—"}</strong><small>{governance.raci.matrix ? `${governance.raci.matrix.status} · ${governance.raci.gapCount ?? 0} accountability gaps` : "No RACI matrix recorded"}</small></article> : <EvidenceUnavailable reason={governance.raci.reason} />}
     {governance.feasibility.available ? <article><span>Feasibility</span><strong>{governance.feasibility.feasible ?? 0}/{governance.feasibility.total ?? 0}</strong><small>Feasible · {governance.feasibility.notFeasible ?? 0} not feasible · {governance.feasibility.inReview ?? 0} in review</small></article> : <EvidenceUnavailable reason={governance.feasibility.reason} />}
+    {governance.releases.available ? <article><span>Release readiness</span><strong>{governance.releases.ready ?? 0}/{governance.releases.total ?? 0}</strong><small>Ready · {governance.releases.atRisk ?? 0} at risk · {governance.releases.blocked ?? 0} blocked · {governance.releases.openCriticalDefects ?? 0} critical defects open</small></article> : <EvidenceUnavailable reason={governance.releases.reason} />}
   </div></section>;
 }
 

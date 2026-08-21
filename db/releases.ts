@@ -7,7 +7,7 @@ export type ReleaseRow = {
   id: string; businessId: string; projectId: string; projectName: string;
   name: string; releaseType: string; targetVersion: string; plannedDate: string | null;
   status: string; scopeLockedAt: string | null; releasedAt: string | null;
-  ownerUserId: string | null; ownerName: string | null;
+  ownerUserId: string | null; ownerName: string | null; readiness: string | null;
   recordStatus: string; version: number; createdAt: string; updatedAt: string;
 };
 
@@ -16,11 +16,16 @@ export type ScopeItemRow = {
   itemType: string; status: string; deliveryState: string; addedAt: string;
 };
 
+// Section 10's own Release portfolio screen contract names "readiness badge" as a primary component
+// alongside the table itself — a correlated latest-snapshot subquery is cheap here (one row per
+// Release, indexed by idx_release_readiness_release_time) and lets the list carry it directly rather
+// than requiring a second round-trip per row.
 const releaseColumns = `
   r.id,r.business_id businessId,r.project_id projectId,pr.name projectName,
   r.name,r.release_type releaseType,r.target_version targetVersion,r.planned_date plannedDate,
   r.status,r.scope_locked_at scopeLockedAt,r.released_at releasedAt,
   r.owner_user_id ownerUserId,u.display_name ownerName,
+  (SELECT rs.readiness FROM release_readiness_snapshots rs WHERE rs.release_id=r.id ORDER BY rs.calculated_at DESC,rs.id DESC LIMIT 1) readiness,
   r.record_status recordStatus,r.version,r.created_at createdAt,r.updated_at updatedAt
 `;
 

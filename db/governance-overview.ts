@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 
-export type GovernanceOverviewAccess = { documents: boolean; requirements: boolean; signoffs: boolean; raci: boolean; feasibility: boolean };
+export type GovernanceOverviewAccess = { documents: boolean; requirements: boolean; signoffs: boolean; raci: boolean; feasibility: boolean; releases: boolean };
 
 const documentOrder = `CASE cv.lifecycle_status WHEN 'DRAFT' THEN 0 WHEN 'IN_REVIEW' THEN 1 WHEN 'APPROVED_WITH_CONDITIONS' THEN 2 WHEN 'APPROVED' THEN 3 ELSE 4 END, cv.major_version DESC, cv.minor_version DESC, cv.created_at DESC`;
 
@@ -85,14 +85,43 @@ async function feasibilitySummary(projectId: string) {
   };
 }
 
+// Stage 4 Step 11 — Release readiness and open-defect attention on the existing Governance summary
+// (Section 9: "Release readiness and open-defect attention on the existing Governance summary").
+// Scoped to this Project's active Releases; mirrors getPortfolioStage4Insights' readiness roll-up
+// but Project-scoped rather than portfolio-wide, and adds the Project's own open-critical-defect count.
+async function releaseSummary(projectId: string) {
+  const [readiness, defectCounts] = await Promise.all([
+    env.DB.prepare(`
+      SELECT COUNT(*) total,
+        COALESCE(SUM(CASE WHEN latest.readiness='READY' THEN 1 ELSE 0 END),0) ready,
+        COALESCE(SUM(CASE WHEN latest.readiness='AT_RISK' THEN 1 ELSE 0 END),0) atRisk,
+        COALESCE(SUM(CASE WHEN latest.readiness='BLOCKED' THEN 1 ELSE 0 END),0) blocked
+      FROM releases r
+      LEFT JOIN release_readiness_snapshots latest ON latest.id=(
+        SELECT rs.id FROM release_readiness_snapshots rs WHERE rs.release_id=r.id ORDER BY rs.calculated_at DESC,rs.id DESC LIMIT 1
+      )
+      WHERE r.project_id=? AND r.record_status='ACTIVE' AND r.status NOT IN ('RELEASED','ROLLED_BACK','CANCELLED','REJECTED')
+    `).bind(projectId).first<{ total: number; ready: number; atRisk: number; blocked: number }>(),
+    env.DB.prepare(`
+      SELECT COUNT(*) openTotal, COALESCE(SUM(CASE WHEN severity='CRITICAL' THEN 1 ELSE 0 END),0) openCritical
+      FROM defects WHERE project_id=? AND status NOT IN ('CLOSED','DUPLICATE','DEFERRED')
+    `).bind(projectId).first<{ openTotal: number; openCritical: number }>(),
+  ]);
+  return {
+    total: Number(readiness?.total ?? 0), ready: Number(readiness?.ready ?? 0), atRisk: Number(readiness?.atRisk ?? 0), blocked: Number(readiness?.blocked ?? 0),
+    openDefects: Number(defectCounts?.openTotal ?? 0), openCriticalDefects: Number(defectCounts?.openCritical ?? 0),
+  };
+}
+
 export async function getProjectGovernanceSummary(projectId: string, access: GovernanceOverviewAccess) {
-  const [documents, requirements, pending, openConditions, raci, feasibility] = await Promise.all([
+  const [documents, requirements, pending, openConditions, raci, feasibility, releases] = await Promise.all([
     access.documents ? documentSummary(projectId) : Promise.resolve(null),
     access.requirements ? requirementCoverageSummary(projectId) : Promise.resolve(null),
     access.signoffs ? pendingSignoffCount(projectId) : Promise.resolve(null),
     access.signoffs ? openConditionCount(projectId) : Promise.resolve(null),
     access.raci ? raciSummary(projectId) : Promise.resolve(null),
     access.feasibility ? feasibilitySummary(projectId) : Promise.resolve(null),
+    access.releases ? releaseSummary(projectId) : Promise.resolve(null),
   ]);
   return {
     documents: documents ? { available: true as const, items: documents } : { available: false as const, reason: "Requires BRD/PRD viewing permission." },
@@ -100,5 +129,6 @@ export async function getProjectGovernanceSummary(projectId: string, access: Gov
     signoffs: pending !== null && openConditions !== null ? { available: true as const, pending, openConditions } : { available: false as const, reason: "Requires sign-off viewing permission." },
     raci: raci ? { available: true as const, ...raci } : { available: false as const, reason: "Requires RACI viewing permission." },
     feasibility: feasibility ? { available: true as const, ...feasibility } : { available: false as const, reason: "Requires feasibility viewing permission." },
+    releases: releases ? { available: true as const, ...releases } : { available: false as const, reason: "Requires Release viewing permission." },
   };
 }

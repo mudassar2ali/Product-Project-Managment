@@ -16,6 +16,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     signoffs: context.principal.permissions.includes("signoff.view"),
     raci: context.principal.permissions.includes("raci.view"),
     feasibility: context.principal.permissions.includes("feasibility.view"),
+    releases: context.principal.permissions.includes("release.view"),
   });
   if (!overview) return apiError(404, "PROJECT_NOT_FOUND", "Project was not found.", context.correlationId, context.timestamp);
   return Response.json({ data: overview, meta: { correlationId: context.correlationId, timestamp: context.timestamp } }, { headers: { "cache-control": "no-store" } });

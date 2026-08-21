@@ -44,7 +44,7 @@ export async function getProject(id: string) {
   return record ? (await attachWeights([record]))[0] : null;
 }
 
-export async function getProjectOverview(id: string, access: DeliveryInsightAccess = { backlog: true, sprints: true, metrics: true }, governanceAccess: GovernanceOverviewAccess = { documents: false, requirements: false, signoffs: false, raci: false, feasibility: false }) {
+export async function getProjectOverview(id: string, access: DeliveryInsightAccess = { backlog: true, sprints: true, metrics: true }, governanceAccess: GovernanceOverviewAccess = { documents: false, requirements: false, signoffs: false, raci: false, feasibility: false, releases: false }) {
   const project = await getProject(id);
   if (!project) return null;
   const [activity,deliveryLink,sprint,milestoneRows,raidSummary,deliveryInsights,governance] = await Promise.all([

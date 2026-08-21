@@ -9,7 +9,7 @@ type UserOption = { id: string; displayName: string };
 type ReleaseSummary = {
   id: string; businessId: string; projectId: string; projectName: string; name: string;
   releaseType: string; targetVersion: string; plannedDate: string | null; status: string;
-  ownerName: string | null; updatedAt: string;
+  ownerName: string | null; readiness: string | null; updatedAt: string;
 };
 
 const emptyForm = { projectId: "", name: "", releaseType: "MINOR", targetVersion: "", plannedDate: "", ownerUserId: "" };
@@ -87,13 +87,14 @@ export function ReleasePortfolio({ canCreate, onOpen }: { canCreate: boolean; on
     {loading ? <div className="module-state" role="status"><span className="loader" />Loading Releases…</div>
       : error && !items.length ? <div className="module-state error-state"><strong>Releases are unavailable</strong><p>{error}</p><button onClick={load}>Try again</button></div>
       : !items.length ? <div className="module-state empty-state"><span>◇</span><strong>No Releases found</strong><p>{projects.length ? "Create a Release beneath an active Project." : "Create a Project before adding its first Release."}</p>{canCreate && projects.length > 0 && <button onClick={create}>Create Release</button>}</div>
-      : <div className="table-shell"><table className="portfolio-table"><thead><tr><th>Release</th><th>Project</th><th>Type</th><th>Target version</th><th>Status</th><th>Owner</th><th>Planned date</th><th><span className="sr-only">Actions</span></th></tr></thead><tbody>
+      : <div className="table-shell"><table className="portfolio-table"><thead><tr><th>Release</th><th>Project</th><th>Type</th><th>Target version</th><th>Status</th><th>Readiness</th><th>Owner</th><th>Planned date</th><th><span className="sr-only">Actions</span></th></tr></thead><tbody>
         {items.map((release) => <tr key={release.id}>
           <td><button className="project-link" onClick={() => onOpen(release.id)}><strong>{release.name}</strong><span>{release.businessId}</span></button></td>
           <td>{release.projectName}</td>
           <td>{titleCase(release.releaseType)}</td>
           <td>{release.targetVersion || "—"}</td>
           <td><span className={`tone-badge tone-${toneForReleaseStatus(release.status)}`}>{titleCase(release.status)}</span></td>
+          <td><ReadinessBadge readiness={release.readiness} /></td>
           <td>{release.ownerName ?? "Unassigned"}</td>
           <td>{formatDate(release.plannedDate)}</td>
           <td><button className="row-action" onClick={() => onOpen(release.id)}>Open</button></td>
