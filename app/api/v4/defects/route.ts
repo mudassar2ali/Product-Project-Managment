@@ -36,6 +36,9 @@ export async function POST(request: Request) {
   catch { return apiError(400, "INVALID_JSON", "Request body must be valid JSON.", context.correlationId, context.timestamp); }
   const validation = validateDefectCreationInput(body);
   if (!validation.ok) return apiError(422, "VALIDATION_FAILED", "Review the highlighted fields.", context.correlationId, context.timestamp, validation.details);
+  const { consumeRateLimit, rateLimitHeaders, recordOperationalEvent } = await import("../../../../db/operations");
+  const rateLimit = await consumeRateLimit("DEFECT_CREATE", context.principal.user.userId);
+  if (!rateLimit.allowed) return apiError(429, "OPERATION_RATE_LIMITED", "Too many Defects created. Try again shortly.", context.correlationId, context.timestamp, [], rateLimitHeaders(rateLimit));
   const { createDefect } = await import("../../../../db/defects");
   const result = await createDefect(validation.value, context.principal.user.userId, context.correlationId);
   const errors = {
@@ -43,6 +46,11 @@ export async function POST(request: Request) {
     invalid_release: [422, "INVALID_RELEASE", "Select a Release that belongs to this Project."],
     invalid_backlog_item: [422, "INVALID_BACKLOG_ITEM", "Select a Backlog item that belongs to this Project."],
   } as const;
-  if (result.kind !== "ok") { const error = errors[result.kind]; return apiError(error[0], error[1], error[2], context.correlationId, context.timestamp); }
-  return Response.json({ data: result.defect, meta: { correlationId: context.correlationId, timestamp: context.timestamp } }, { status: 201, headers: apiHeaders(context.correlationId) });
+  if (result.kind !== "ok") {
+    const error = errors[result.kind];
+    await recordOperationalEvent({ operation: "DEFECT_CREATE", outcome: "ERROR", statusCode: error[0], durationMs: 0, actorUserId: context.principal.user.userId, correlationId: context.correlationId, entityType: "Defect" });
+    return apiError(error[0], error[1], error[2], context.correlationId, context.timestamp);
+  }
+  await recordOperationalEvent({ operation: "DEFECT_CREATE", outcome: "SUCCESS", statusCode: 201, durationMs: 0, actorUserId: context.principal.user.userId, correlationId: context.correlationId, entityType: "Defect", entityId: result.defect.id });
+  return Response.json({ data: result.defect, meta: { correlationId: context.correlationId, timestamp: context.timestamp } }, { status: 201, headers: apiHeaders(context.correlationId, rateLimitHeaders(rateLimit)) });
 }

@@ -21,6 +21,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const validation = validateExecutionInput(body);
   if (!validation.ok) return apiError(422, "VALIDATION_FAILED", "Review the highlighted fields.", context.correlationId, context.timestamp, validation.details);
   const { id } = await params;
+  const { consumeRateLimit, rateLimitHeaders, recordOperationalEvent } = await import("../../../../../../db/operations");
+  const rateLimit = await consumeRateLimit("UAT_EXECUTION_INSERT", context.principal.user.userId);
+  if (!rateLimit.allowed) return apiError(429, "OPERATION_RATE_LIMITED", "Too many execution recordings. Try again shortly.", context.correlationId, context.timestamp, [], rateLimitHeaders(rateLimit));
   const { recordExecution } = await import("../../../../../../db/uat-executions");
   const result = await recordExecution(id, validation.value, context.principal.user.userId, context.correlationId);
   const errors = {
@@ -28,6 +31,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     test_case_not_ready: [409, "TEST_CASE_NOT_READY", "Only a Ready test case can record an execution."],
     evidence_invalid: [422, "EXECUTION_EVIDENCE_INVALID", "Executor and execution time are required for a recorded result and not allowed for Not Executed."],
   } as const;
-  if (result.kind !== "ok") { const error = errors[result.kind]; return apiError(error[0], error[1], error[2], context.correlationId, context.timestamp); }
-  return Response.json({ data: result, meta: { correlationId: context.correlationId, timestamp: context.timestamp } }, { status: 201, headers: apiHeaders(context.correlationId) });
+  if (result.kind !== "ok") {
+    const error = errors[result.kind];
+    await recordOperationalEvent({ operation: "UAT_EXECUTION_INSERT", outcome: "ERROR", statusCode: error[0], durationMs: 0, actorUserId: context.principal.user.userId, correlationId: context.correlationId, entityType: "UatTestCase", entityId: id });
+    return apiError(error[0], error[1], error[2], context.correlationId, context.timestamp);
+  }
+  await recordOperationalEvent({ operation: "UAT_EXECUTION_INSERT", outcome: "SUCCESS", statusCode: 201, durationMs: 0, actorUserId: context.principal.user.userId, correlationId: context.correlationId, entityType: "UatTestCase", entityId: id });
+  return Response.json({ data: result, meta: { correlationId: context.correlationId, timestamp: context.timestamp } }, { status: 201, headers: apiHeaders(context.correlationId, rateLimitHeaders(rateLimit)) });
 }

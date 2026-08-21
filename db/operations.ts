@@ -6,6 +6,9 @@ export const rateLimitPolicies = {
   GOVERNANCE_SUBMIT: { limit: 20, windowSeconds: 300 },
   SIGNOFF_DECISION: { limit: 20, windowSeconds: 300 },
   TRACEABILITY_QUERY: { limit: 20, windowSeconds: 300 },
+  READINESS_RECALCULATE: { limit: 20, windowSeconds: 300 },
+  UAT_EXECUTION_INSERT: { limit: 20, windowSeconds: 300 },
+  DEFECT_CREATE: { limit: 20, windowSeconds: 300 },
 } as const;
 
 export type RateLimitedOperation = keyof typeof rateLimitPolicies;
