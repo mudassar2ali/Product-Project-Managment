@@ -32,7 +32,9 @@ test("release navigation exposes exactly the two authorized Stage 3 entry points
   for (const label of ["Dashboard", "Products", "Projects", "Backlog", "Sprints", "Milestones", "Ideas", "RAID", "Reports", "Integrations", "Audit Trail", "BRD / PRD", "Requirements"]) {
     assert.match(shell, new RegExp(`label: "${label.replaceAll("/", "\\/")}"`));
   }
-  for (const deferred of ["Traceability", "Sign-offs", "RACI", "Feasibility", "Administration", "Market Intelligence", "TAM", "SAM", "SOM", "Financial", "Scorecards", "AI Assistant"]) {
+  // "Administration" shipped in Stage 5 and is intentionally no longer in this deferred list --
+  // every other entry here was still deferred as of Stage 5 and stays checked.
+  for (const deferred of ["Traceability", "Sign-offs", "RACI", "Feasibility", "Market Intelligence", "TAM", "SAM", "SOM", "Financial", "Scorecards", "AI Assistant"]) {
     assert.doesNotMatch(shell, new RegExp(`label: "${deferred}"`));
   }
 });

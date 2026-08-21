@@ -30,7 +30,10 @@ test("all Stage 1 and Stage 2 migrations replay without integrity loss", async (
 test("release navigation preserves Stage 2 capability and keeps unauthorized future modules absent", async () => {
   const shell = await read("app/command-center-shell.tsx");
   for (const featureLabel of ["Dashboard", "Products", "Projects", "Backlog", "Sprints", "Milestones", "Ideas", "RAID", "Reports", "Integrations", "Audit Trail", "BRD / PRD", "Requirements"]) assert.match(shell, new RegExp(`label: "${featureLabel.replaceAll("/", "\\/")}"`));
-  for (const deferred of ["Administration", "Market Intelligence", "TAM", "SAM", "SOM", "Financial", "Scorecards", "Release Management", "AI Assistant"]) assert.doesNotMatch(shell, new RegExp(`label: "${deferred}"`));
+  // "Administration" shipped in Stage 5 (blueprint's own database-managed role & access
+  // administration stage) and is intentionally no longer in this deferred list -- every other
+  // entry here was still deferred as of Stage 5 and stays checked.
+  for (const deferred of ["Market Intelligence", "TAM", "SAM", "SOM", "Financial", "Scorecards", "Release Management", "AI Assistant"]) assert.doesNotMatch(shell, new RegExp(`label: "${deferred}"`));
   for (const stale of ["Search and notifications are scheduled", "The command center shell is ready", "1 of 18 in progress"]) assert.doesNotMatch(shell, new RegExp(stale));
   assert.match(shell, /Stage 3 build/);
   assert.match(shell, /BRD &amp; PRD authoring active/);

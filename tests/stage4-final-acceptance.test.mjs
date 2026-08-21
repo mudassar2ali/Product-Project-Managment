@@ -35,9 +35,11 @@ test("navigation exposes Releases as an authorized entry point, with UAT, defect
   ]) {
     assert.match(shell, new RegExp(`label: "${label.replaceAll("/", "\\/")}"`));
   }
+  // "Administration" shipped in Stage 5 and is intentionally no longer in this deferred list --
+  // every other entry here was still deferred as of Stage 5 and stays checked.
   for (const deferred of [
     "UAT", "Defects", "Deployments", "Traceability", "Sign-offs", "RACI", "Feasibility",
-    "Administration", "Market Intelligence", "TAM", "SAM", "SOM", "Financial", "Scorecards", "AI Assistant",
+    "Market Intelligence", "TAM", "SAM", "SOM", "Financial", "Scorecards", "AI Assistant",
   ]) {
     assert.doesNotMatch(shell, new RegExp(`label: "${deferred}"`));
   }

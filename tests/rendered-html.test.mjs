@@ -123,6 +123,9 @@ test("server-renders the Stage 1 application shell", async () => {
   assert.match(html, /single operational view of products, projects, delivery health/i);
   assert.match(html, /Skip to content/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
+  // EXECUTIVE_VIEWER (the default for a caller with no database role assignment) lacks
+  // admin.users, so the Administration nav entry -- gated on that permission -- must not render.
+  assert.doesNotMatch(html, /Administration/);
 });
 
 test("enforces Product write permission before database access", async () => {
@@ -185,6 +188,20 @@ test("resolves the owner's permanent Administrator override from the database-ma
   assert.ok(body.data.roles.includes("ADMINISTRATOR"));
   assert.ok(body.data.permissions.includes("admin.users"));
   assert.ok(body.data.permissions.includes("admin.roles"));
+});
+
+test("shows the Administration nav entry in the rendered shell for the owner, gated correctly by admin.users", async () => {
+  const response = await render("/", true, {
+    headers: {
+      "oai-authenticated-user-id": "owner-user-1",
+      "oai-authenticated-user-email": "mudassar2ali@gmail.com",
+      "oai-authenticated-user-full-name": "Site%20Owner",
+      "oai-authenticated-user-full-name-encoding": "percent-encoded-utf-8",
+    },
+  });
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /Administration/);
 });
 
 test("resolves a real database role assignment for a non-owner user, and reflects its revocation on the next request", async () => {
