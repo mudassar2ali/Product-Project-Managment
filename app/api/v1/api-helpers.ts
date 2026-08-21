@@ -8,7 +8,9 @@ export async function authorizeApi(permission: PermissionCode): Promise<RequestC
   const timestamp = new Date().toISOString();
   const user = await getChatGPTUser();
   if (!user) return apiError(401, "AUTHENTICATION_REQUIRED", "Sign in is required to access this resource.", correlationId, timestamp);
-  const principal = createPrincipal(user);
+  const { getUserRoleCodes } = await import("../../../db/role-assignments");
+  const roleCodes = await getUserRoleCodes(user.userId);
+  const principal = createPrincipal(user, roleCodes);
   if (!hasPermission(principal, permission)) return apiError(403, "FORBIDDEN", "You do not have permission to perform this action.", correlationId, timestamp);
   const { ensureAuthenticatedUser } = await import("../../../db/identity");
   const persistedUserId = await ensureAuthenticatedUser(user);

@@ -12,7 +12,9 @@ export const metadata: Metadata = {
 
 export default async function Home() {
   const user = await requireChatGPTUser("/");
-  const principal = createPrincipal(user);
+  const { getUserRoleCodes } = await import("../db/role-assignments");
+  const roleCodes = await getUserRoleCodes(user.userId);
+  const principal = createPrincipal(user, roleCodes);
   requirePermission(principal, "dashboard.view");
   return <CommandCenterShell principal={principal} />;
 }

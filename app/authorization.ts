@@ -111,13 +111,16 @@ export class AuthorizationError extends Error {
   }
 }
 
+const OWNER_EMAIL = "mudassar2ali@gmail.com";
+
 export function createPrincipal(user: ChatGPTUser, roleCodes: RoleCode[] = ["EXECUTIVE_VIEWER"]): Principal {
-  // The private-site owner is the controlled bootstrap administrator until
-  // database-managed role assignments become available in Administration.
-  if (roleCodes.length === 1 && roleCodes[0] === "EXECUTIVE_VIEWER" && user.email.toLowerCase() === "mudassar2ali@gmail.com") {
-    roleCodes = ["ADMINISTRATOR"];
-  }
-  const validRoles = [...new Set(roleCodes)].filter((role): role is RoleCode => role in rolePermissions);
+  // The private-site owner is a permanent Administrator override, independent of whatever
+  // database role assignments exist for them (Stage 5 blueprint Section 3, principle 3).
+  // This is unconditional -- not just a fallback for when no role is assigned -- so that
+  // database-managed role assignment (Stage 5) can never lock every administrator out of
+  // the system, no matter what user_role_assignments contains for the owner's own account.
+  const inputRoles = user.email.toLowerCase() === OWNER_EMAIL ? [...roleCodes, "ADMINISTRATOR" as const] : roleCodes;
+  const validRoles = [...new Set(inputRoles)].filter((role): role is RoleCode => role in rolePermissions);
   const effectiveRoles = validRoles.length ? validRoles : ["EXECUTIVE_VIEWER"];
   const effectivePermissions = [...new Set(effectiveRoles.flatMap((role) => rolePermissions[role]))];
   return {

@@ -1,30 +1,112 @@
 import assert from "node:assert/strict";
-import { access, readFile } from "node:fs/promises";
-import test from "node:test";
+import { access, readFile, readdir } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+import test, { after } from "node:test";
+
+// This file is the ONLY test that exercises the real built Worker bundle (dist/server/index.js)
+// end to end, including any code path that touches the D1 binding. The bundle's db/*.ts modules
+// import `env` from the built-in "cloudflare:workers" module, which only resolves inside an
+// actual Workers runtime (workerd) -- plain Node's ESM loader cannot resolve the "cloudflare:"
+// URL scheme at all. Earlier revisions of this helper loaded dist/server/index.js with a bare
+// `import()` and called `.fetch(request, env, ctx)` directly; that happened to work only because
+// no test here had ever previously exercised a route that reaches the DB (every DB-touching route
+// was reached only through the in-memory node:sqlite migration-replay tests in the other test
+// files, which test SQL/migrations directly rather than through this application's db/*.ts
+// modules). Stage 5 Step 2 added a DB-backed role lookup to the SSR home route and to
+// authorizeApi(), which every authenticated request now passes through -- so this file now boots
+// a real Miniflare (workerd) instance and dispatches requests through it, matching how `wrangler
+// dev`/production actually run this Worker, instead of a bare Node import.
+let workerReady;
+
+async function walkJsFiles(dir, base = dir, out = []) {
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) await walkJsFiles(full, base, out);
+    else if (/\.m?js$/.test(entry.name)) out.push(path.relative(base, full).split(path.sep).join("/"));
+  }
+  return out;
+}
+
+async function createWorker() {
+  const { Miniflare } = await import("miniflare");
+  const serverRoot = fileURLToPath(new URL("../dist/server/", import.meta.url));
+  const wranglerConfig = JSON.parse(await readFile(path.join(serverRoot, "wrangler.json"), "utf8"));
+  const [d1Binding] = wranglerConfig.d1_databases;
+  if (!d1Binding) throw new Error("dist/server/wrangler.json has no d1_databases binding -- run `npm run build` first.");
+
+  // Enumerate every built .js/.mjs file explicitly (matching wrangler.json's own
+  // `{ type: "ESModule", globs: ["**/*.js", "**/*.mjs"] }` rule for this no_bundle Worker):
+  // the app resolves several of its dynamic import() specifiers (RSC references, lazy db/*.ts
+  // modules) from a runtime manifest rather than a static string literal, which Miniflare's own
+  // static-analysis module discovery cannot follow, so every module has to be listed up front.
+  const relativeFiles = await walkJsFiles(serverRoot);
+  relativeFiles.sort((a, b) => (a === "index.js" ? -1 : b === "index.js" ? 1 : 0));
+  const modules = relativeFiles.map((relativePath) => ({ type: "ESModule", path: path.join(serverRoot, relativePath) }));
+
+  const mf = new Miniflare({
+    modules,
+    modulesRoot: serverRoot,
+    compatibilityDate: wranglerConfig.compatibility_date,
+    compatibilityFlags: wranglerConfig.compatibility_flags,
+    d1Databases: { [d1Binding.binding]: "rendered-html-test" },
+    d1Persist: false,
+    serviceBindings: {
+      ASSETS: () => new Response("Not found", { status: 404 }),
+    },
+  });
+  await mf.ready;
+
+  // Replay every migration against this test run's isolated, in-memory D1 database -- the same
+  // split-on-statement-breakpoint approach the other test files use against node:sqlite (see
+  // e.g. tests/stage2-final-acceptance.test.mjs), applied here against a real D1Database instead.
+  const db = await mf.getD1Database(d1Binding.binding);
+  const migrationsDir = fileURLToPath(new URL("../drizzle/", import.meta.url));
+  const migrationFiles = (await readdir(migrationsDir)).filter((name) => name.endsWith(".sql")).sort();
+  for (const file of migrationFiles) {
+    const source = await readFile(path.join(migrationsDir, file), "utf8");
+    for (const statement of source.split("--> statement-breakpoint").map((value) => value.trim()).filter(Boolean)) {
+      await db.prepare(statement).run();
+    }
+  }
+
+  return { mf, db };
+}
+
+function getWorker() {
+  workerReady ??= createWorker();
+  return workerReady;
+}
+
+after(async () => {
+  if (!workerReady) return;
+  const { mf } = await workerReady;
+  await mf.dispose();
+});
 
 async function render(path = "/", authenticated = true, init = {}) {
-  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
-  const { default: worker } = await import(workerUrl.href);
-  return worker.fetch(
-    new Request(`http://localhost${path}`, {
-      ...init,
-      headers: {
-        accept: path.startsWith("/api/") ? "application/json" : "text/html",
-        ...(authenticated
-          ? {
-              "oai-authenticated-user-id": "test-user-1",
-              "oai-authenticated-user-email": "alex.morgan@example.com",
-              "oai-authenticated-user-full-name": "Alex%20Morgan",
-              "oai-authenticated-user-full-name-encoding": "percent-encoded-utf-8",
-            }
-          : {}),
-        ...(init.headers ?? {}),
-      },
-    }),
-    { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
-    { waitUntil() {}, passThroughOnException() {} },
-  );
+  const { mf } = await getWorker();
+  return mf.dispatchFetch(`http://localhost${path}`, {
+    // Unlike the bare `worker.fetch(request, env, ctx)` call this replaced, Miniflare's
+    // dispatchFetch defaults to following redirects like a normal browser fetch() -- without
+    // this, the 307 the app issues to /signin-with-chatgpt gets silently followed and re-rendered
+    // (as a 404, since that path isn't an actual page route), rather than being returned so the
+    // test below can assert on the raw redirect status and Location header.
+    redirect: "manual",
+    ...init,
+    headers: {
+      accept: path.startsWith("/api/") ? "application/json" : "text/html",
+      ...(authenticated
+        ? {
+            "oai-authenticated-user-id": "test-user-1",
+            "oai-authenticated-user-email": "alex.morgan@example.com",
+            "oai-authenticated-user-full-name": "Alex%20Morgan",
+            "oai-authenticated-user-full-name-encoding": "percent-encoded-utf-8",
+          }
+        : {}),
+      ...(init.headers ?? {}),
+    },
+  });
 }
 
 test("server-renders the Stage 1 application shell", async () => {
@@ -87,6 +169,86 @@ test("rejects anonymous API access and returns authenticated identity safely", a
   assert.deepEqual(authenticatedBody.data.roles, ["EXECUTIVE_VIEWER"]);
   assert.ok(authenticatedBody.data.permissions.includes("dashboard.view"));
   assert.ok(!authenticatedBody.data.permissions.includes("admin.users"));
+});
+
+test("resolves the owner's permanent Administrator override from the database-managed role catalog", async () => {
+  const response = await render("/api/v1/me", true, {
+    headers: {
+      "oai-authenticated-user-id": "owner-user-1",
+      "oai-authenticated-user-email": "mudassar2ali@gmail.com",
+      "oai-authenticated-user-full-name": "Site%20Owner",
+      "oai-authenticated-user-full-name-encoding": "percent-encoded-utf-8",
+    },
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.ok(body.data.roles.includes("ADMINISTRATOR"));
+  assert.ok(body.data.permissions.includes("admin.users"));
+  assert.ok(body.data.permissions.includes("admin.roles"));
+});
+
+test("resolves a real database role assignment for a non-owner user, and reflects its revocation on the next request", async () => {
+  const { db } = await getWorker();
+  const userId = "assigned-user-1";
+
+  const beforeAssignment = await render("/api/v1/me", true, {
+    headers: {
+      "oai-authenticated-user-id": userId,
+      "oai-authenticated-user-email": "jordan.lee@example.com",
+      "oai-authenticated-user-full-name": "Jordan%20Lee",
+      "oai-authenticated-user-full-name-encoding": "percent-encoded-utf-8",
+    },
+  });
+  const beforeBody = await beforeAssignment.json();
+  assert.deepEqual(beforeBody.data.roles, ["EXECUTIVE_VIEWER"]);
+  assert.ok(!beforeBody.data.permissions.includes("release.readiness"));
+
+  // Assign PRODUCT_MANAGER directly through the same user_role_assignments table Step 3's
+  // (not-yet-built) assignment API will write to -- this is the "critical journey" scenario from
+  // the Stage 5 blueprint's test strategy (Section 19), proving role resolution reads real
+  // assignment rows, not just the empty-table default already covered above. `user_role_assignments.
+  // user_id` references `users.id`, so the referenced user row has to exist first -- this route
+  // (/api/v1/me) never persists one itself (only authorizeApi's identity-persistence path does).
+  await db
+    .prepare(
+      `INSERT INTO users (id, external_user_id, email, display_name, created_by, updated_by)
+       VALUES (?, ?, 'jordan.lee@example.com', 'Jordan Lee', 'SYSTEM', 'SYSTEM')`,
+    )
+    .bind(userId, userId)
+    .run();
+  await db
+    .prepare(
+      `INSERT INTO user_role_assignments (id, user_id, role_id, scope_type, scope_id, created_by, updated_by)
+       VALUES (?, ?, 'role_product_manager', 'GLOBAL', '*', 'SYSTEM', 'SYSTEM')`,
+    )
+    .bind(`assignment-${userId}`, userId)
+    .run();
+
+  const afterAssignment = await render("/api/v1/me", true, {
+    headers: {
+      "oai-authenticated-user-id": userId,
+      "oai-authenticated-user-email": "jordan.lee@example.com",
+      "oai-authenticated-user-full-name": "Jordan%20Lee",
+      "oai-authenticated-user-full-name-encoding": "percent-encoded-utf-8",
+    },
+  });
+  const afterBody = await afterAssignment.json();
+  assert.deepEqual(afterBody.data.roles, ["PRODUCT_MANAGER"]);
+  assert.ok(afterBody.data.permissions.includes("release.readiness"));
+  assert.ok(!afterBody.data.permissions.includes("admin.users"));
+
+  await db.prepare(`DELETE FROM user_role_assignments WHERE id = ?`).bind(`assignment-${userId}`).run();
+
+  const afterRevocation = await render("/api/v1/me", true, {
+    headers: {
+      "oai-authenticated-user-id": userId,
+      "oai-authenticated-user-email": "jordan.lee@example.com",
+      "oai-authenticated-user-full-name": "Jordan%20Lee",
+      "oai-authenticated-user-full-name-encoding": "percent-encoded-utf-8",
+    },
+  });
+  const revokedBody = await afterRevocation.json();
+  assert.deepEqual(revokedBody.data.roles, ["EXECUTIVE_VIEWER"]);
 });
 
 test("keeps the shell accessible and the starter preview removed", async () => {

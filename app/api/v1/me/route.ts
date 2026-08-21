@@ -23,7 +23,9 @@ export async function GET() {
     );
   }
 
-  const principal = createPrincipal(user);
+  const { getUserRoleCodes } = await import("../../../../db/role-assignments");
+  const roleCodes = await getUserRoleCodes(user.userId);
+  const principal = createPrincipal(user, roleCodes);
 
   return Response.json(
     {
