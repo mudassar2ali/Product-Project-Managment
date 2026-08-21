@@ -86,11 +86,12 @@ export function ReleaseDetail({ releaseId, onClose, currentUserId, permissions }
   }, [loadDeploymentEvidence]);
 
   useEffect(() => { const handle = window.setTimeout(() => void load(), 0); return () => window.clearTimeout(handle); }, [load]);
+  const releaseProjectId = release?.projectId;
   useEffect(() => {
-    if (!release) return;
-    const handle = window.setTimeout(() => void loadProjectScoped(release.projectId), 0);
+    if (!releaseProjectId) return;
+    const handle = window.setTimeout(() => void loadProjectScoped(releaseProjectId), 0);
     return () => window.clearTimeout(handle);
-  }, [release?.projectId, loadProjectScoped]);
+  }, [releaseProjectId, loadProjectScoped]);
   useEffect(() => { if (deployOpen) window.setTimeout(() => first.current?.focus(), 0); }, [deployOpen]);
 
   const flash = (message: string) => { setSuccess(message); window.setTimeout(() => setSuccess(""), 3000); };
