@@ -26,7 +26,7 @@ test("Azure mappings are controlled compatible versioned and audit governed", as
 test("Azure provider retrieves paginated relation-rich batches without Azure mutation methods", async () => {
   const [contract, provider] = await Promise.all([read("app/integrations/engineering-delivery-provider.ts"), read("app/integrations/azure-devops-provider.ts")]);
   for (const value of ["AdvancedWorkItemSource", "ExternalWorkItemRelation", "getAdvancedWorkItems", "parentExternalId", "remainingWork", "sourceRevision"]) assert.match(contract, new RegExp(value));
-  for (const value of ["x-ms-continuationtoken", "continuationToken", "workitemsbatch", "Relations", "System.Parent", "System.IterationPath", "Microsoft.VSTS.Scheduling.RemainingWork", "retry-after", "SHA-256", "rawItems.length === ids.length"]) assert.match(provider, new RegExp(value));
+  for (const value of ["x-ms-continuationtoken", "continuationToken", "workitemsbatch", "Relations", "System.Parent", "System.IterationPath", "Microsoft.VSTS.Scheduling.RemainingWork", "retry-after", "SHA-256", "items.length === ids.length"]) assert.match(provider, new RegExp(value));
   assert.doesNotMatch(provider, /method:\s*["'](?:PATCH|PUT|DELETE)/);
 });
 

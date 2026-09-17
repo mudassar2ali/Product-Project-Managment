@@ -112,15 +112,14 @@ export class AzureDevOpsProvider implements EngineeringDeliveryProvider {
       if (next.length < 1000) break;
       if (ids.length >= 50000) throw new Error("Azure Project exceeds the supported 50,000 work-item sync size; no snapshot was replaced.");
     }
-    const rawItems: Item[] = [];
+    const items: ExternalWorkItem[] = [];
     for (let index = 0; index < ids.length; index += 200) {
       const batch = await this.query<{ value: Item[] }>(`/${encodeURIComponent(projectId)}/_apis/wit/workitemsbatch?api-version=7.1`, { ids: ids.slice(index, index + 200), $expand: "Relations", errorPolicy: "Omit" });
-      rawItems.push(...batch.value);
+      items.push(...batch.value.map(item => this.toExternalWorkItem(projectId, item)));
     }
-    const items = rawItems.map(item => this.toExternalWorkItem(projectId, item));
     const revisionInput = items.map(item => `${item.externalId}:${item.externalRevision}`).sort().join("|") || "EMPTY";
     const sourceRevision = await this.revision(revisionInput);
-    return { items, pagesRead: pagesRead + Math.ceil(ids.length / 200), sourceRevision, retrievedAt: new Date().toISOString(), complete: rawItems.length === ids.length };
+    return { items, pagesRead: pagesRead + Math.ceil(ids.length / 200), sourceRevision, retrievedAt: new Date().toISOString(), complete: items.length === ids.length };
   }
 
   private toExternalWorkItem(projectId: string, item: Item): ExternalWorkItem {

@@ -44,3 +44,27 @@ test('Azure sign-in HTML is treated as authentication failure, not a successful 
   t.mock.method(console,'error',()=>{});
   await assert.rejects(provider().getProjects(), error=>error.status===401);
 });
+test('large imports write bounded batches and do not mark a failed partial write as succeeded', async () => {
+  let code = await readFile(new URL('../db/azure-advanced-sync.ts', import.meta.url), 'utf8');
+  code = code.replace(/import \{ env \} from "cloudflare:workers";/, 'const env = globalThis.__azureTestEnv;')
+    .replace(/import \{ mappingKey \}[^;]+;/, 'const mappingKey = value => value.toLowerCase();')
+    .replace(/import \{ getActiveAzureMappingMap \}[^;]+;/, 'const getActiveAzureMappingMap = async () => ({types:new Map([["epic","EPIC"]]),states:new Map([["new","PROPOSED"]])});')
+    .replace(/import \{ prepareAzureSprintMetricSync \}[^;]+;/, 'const prepareAzureSprintMetricSync = async () => ({statements:[],iterationsSeen:0});');
+  let batches = [], failAt = 0;
+  globalThis.__azureTestEnv = { DB: {
+    prepare(sql) {return {sql, bind(...values) {this.values=values;return this;}, async first(){return null;}, async all(){return {results:[]};}};},
+    async batch(rows){batches.push(rows);assert.ok(rows.length<=100);if(batches.length===failAt)throw Error('simulated storage failure');return [];}
+  }};
+  const js = ts.transpileModule(code, { compilerOptions: { module:ts.ModuleKind.ESNext, target:ts.ScriptTarget.ES2022 } }).outputText;
+  const {completeAdvancedSync} = await import('data:text/javascript;base64,'+Buffer.from(js).toString('base64'));
+  const items = Array.from({length:220},(_,index)=>({externalId:String(index),externalRevision:'1',externalType:'Epic',externalState:'New',parentExternalId:null,title:'Epic',owner:null,storyPoints:null,remainingWork:null,blocked:false,blockedReason:null,iterationId:null,iterationPath:null,relations:[],sourceUrl:'https://dev.azure.com/example',sourceChangedAt:null}));
+  const context={id:'link',projectId:'project',connectionId:'connection'};
+  const source={complete:true,items,pagesRead:2,sourceRevision:'revision',retrievedAt:new Date().toISOString()};
+  await completeAdvancedSync('run',context,source,null,'actor','correlation');
+  assert.ok(batches.length>3);
+  assert.match(batches.at(-1)[0].sql,/status='SUCCEEDED'/);
+  batches=[];failAt=2;
+  await assert.rejects(completeAdvancedSync('run',context,source,null,'actor','correlation'),/simulated storage failure/);
+  assert.equal(batches.flat().some(row=>row.sql.includes("status='SUCCEEDED'")),false);
+  delete globalThis.__azureTestEnv;
+});
