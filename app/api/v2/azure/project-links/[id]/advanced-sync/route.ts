@@ -47,7 +47,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     const provider = new AzureDevOpsProvider({ organization: sync.organization, authType: sync.authType as "ENTRA_APPLICATION" | "PAT", credential });
     const [source, sprintSource] = await Promise.all([
       provider.getAdvancedWorkItems(sync.azureProjectId, sync.azureTeamId),
-      sync.azureTeamId ? provider.getSprintHistory(sync.azureProjectId, sync.azureTeamId) : Promise.resolve(null),
+      sync.azureTeamId ? provider.getSprintHistory(sync.azureProjectId, sync.azureTeamId) : provider.getProjectSprintHistory(sync.azureProjectId),
     ]);
     const result = await repository.completeAdvancedSync(run.id, sync, source, sprintSource, context.principal.user.userId, context.correlationId);
     if (result.kind !== "ok") {
@@ -59,9 +59,10 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     await observe("SUCCESS", 200, { runId: result.runId, pagesRead: result.pagesRead, itemsSeen: result.itemsSeen, inserted: result.inserted, updated: result.updated, missing: result.missing, unmappedTypes: result.unmappedTypes, unmappedStates: result.unmappedStates, iterationsSeen: result.iterationsSeen });
     return Response.json({ data: result, meta: { correlationId: context.correlationId, timestamp: result.syncedAt } }, { headers: apiHeaders(context.correlationId, operations.rateLimitHeaders(rateLimit)) });
   } catch (error) {
+    console.error("Advanced sync failure", { message: error instanceof Error ? error.message : "Unknown error" });
     const status = (error as { status?: number }).status;
     const code = status === 401 ? "AZURE_AUTHENTICATION_FAILED" : status === 403 ? "AZURE_PERMISSION_DENIED" : status === 404 ? "AZURE_PROJECT_NOT_FOUND" : status === 429 ? "AZURE_RATE_LIMITED" : error instanceof DOMException && error.name === "AbortError" ? "AZURE_TIMEOUT" : "AZURE_ADVANCED_SYNC_FAILED";
-    const message = code === "AZURE_AUTHENTICATION_FAILED" ? "Azure rejected the configured credential." : code === "AZURE_PERMISSION_DENIED" ? "The credential cannot read Azure work items, relations and Team iterations." : code === "AZURE_PROJECT_NOT_FOUND" ? "The linked Azure Project or Team is unavailable." : code === "AZURE_RATE_LIMITED" ? "Azure rate-limited synchronization. Try again later." : code === "AZURE_TIMEOUT" ? "Azure synchronization timed out; the previous complete snapshot was preserved." : "Azure normalized work items and Sprint evidence could not be synchronized.";
+    const message = status === 400 ? `Azure rejected the work-item query (${(error as { azureType?: string }).azureType ?? "HTTP 400"}). Check the Project and process configuration.` : code === "AZURE_AUTHENTICATION_FAILED" ? "Azure rejected the configured credential." : code === "AZURE_PERMISSION_DENIED" ? "The credential cannot read Azure work items, relations and Team iterations." : code === "AZURE_PROJECT_NOT_FOUND" ? "The linked Azure Project or Team is unavailable." : code === "AZURE_RATE_LIMITED" ? "Azure rate-limited synchronization. Try again later." : code === "AZURE_TIMEOUT" ? "Azure synchronization timed out; the previous complete snapshot was preserved." : "Azure normalized work items and Sprint evidence could not be synchronized.";
     await repository.failAdvancedSync(run.id, id, code, message, context.principal.user.userId, context.correlationId);
     return reject(status === 401 ? 401 : status === 403 ? 403 : status === 404 ? 404 : status === 429 ? 429 : 502, code, message, "ERROR");
   }

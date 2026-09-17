@@ -41,6 +41,10 @@ function groupedDiagnostics(items: NormalizedItem[], invalidParents: string[]) {
 
 export async function completeAdvancedSync(runId: string, context: SyncContext, source: AdvancedWorkItemSource, sprintSource: ExternalSprintSource | null, actor: string, correlationId: string) {
   if (!source.complete || sprintSource?.complete === false) return { kind: "partial_source" as const };
+  if (sprintSource) {
+    const byPath = new Map(sprintSource.iterations.map(iteration => [iteration.path.toLowerCase(), iteration.id]));
+    source = { ...source, items: source.items.map(item => ({ ...item, iterationId: item.iterationPath ? byPath.get(item.iterationPath.toLowerCase()) ?? item.iterationId : item.iterationId })) };
+  }
   const mappings = await getActiveAzureMappingMap(context.connectionId);
   if (!mappings.types.size || !mappings.states.size) return { kind: "mapping_missing" as const };
   const existingResult = await env.DB.prepare("SELECT id,external_id externalId,external_revision externalRevision,item_type itemType,delivery_state deliveryState,parent_id parentId,source_missing_at sourceMissingAt FROM backlog_items WHERE project_id=? AND origin='AZURE_DEVOPS'").bind(context.projectId).all<ExistingItem>();
@@ -55,7 +59,8 @@ export async function completeAdvancedSync(runId: string, context: SyncContext, 
   const prior = await env.DB.prepare("SELECT id FROM azure_sync_runs WHERE link_id=? AND sync_mode='ADVANCED' AND status='SUCCEEDED' AND source_revision=? LIMIT 1").bind(context.id, combinedSourceRevision).first(), idempotent = Boolean(prior);
   let inserted = 0, updated = 0, skipped = 0, snapshotsInserted = 0;
   const statements = [];
-  for (const item of normalized) {
+  const hierarchyOrder: Record<string, number> = { EPIC: 0, FEATURE: 1, STORY: 2, TASK: 3, BUG: 3 };
+  for (const item of [...normalized].sort((a, b) => (hierarchyOrder[a.normalizedType ?? ""] ?? 4) - (hierarchyOrder[b.normalizedType ?? ""] ?? 4))) {
     const snapshotKey = `${item.externalId}:${item.externalRevision}`;
     if (!snapshotKeys.has(snapshotKey)) { snapshotsInserted += 1; statements.push(env.DB.prepare("INSERT INTO azure_work_item_snapshots(id,link_id,sync_run_id,external_id,external_revision,external_type,external_state,normalized_type,normalized_state,parent_external_id,title,owner,story_points,remaining_work,blocked,blocked_reason,iteration_id,iteration_path,relations_json,source_url,source_changed_at,synced_at,created_by,updated_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(crypto.randomUUID(), context.id, runId, item.externalId, item.externalRevision, item.externalType, item.externalState, item.normalizedType, item.normalizedState, item.parentExternalId, item.title, item.owner, item.storyPoints, item.remainingWork, item.blocked ? 1 : 0, item.blockedReason, item.iterationId, item.iterationPath, JSON.stringify(item.relations), item.sourceUrl, item.sourceChangedAt, now, actor, actor)); }
     const existing = existingByExternal.get(item.externalId);

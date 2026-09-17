@@ -4,9 +4,8 @@ type Config = { organization: string; authType: "ENTRA_APPLICATION" | "PAT"; cre
 type AzureList<T> = { count: number; value: T[] };
 type AzureRelation = { rel?: string; url?: string; attributes?: Record<string, unknown> };
 type Item = { id: number; rev: number; fields: Record<string, unknown>; relations?: AzureRelation[] };
-type AzureError = Error & { status?: number; retryAfter?: number };
+export type AzureError = Error & { status?: number; retryAfter?: number; azureType?: string };
 
-const advancedFields = ["System.Id", "System.Rev", "System.WorkItemType", "System.State", "System.Title", "System.AssignedTo", "System.Parent", "System.IterationId", "System.IterationPath", "System.ChangedDate", "System.Tags", "Microsoft.VSTS.Scheduling.StoryPoints", "Microsoft.VSTS.Scheduling.Effort", "Microsoft.VSTS.Scheduling.RemainingWork", "Microsoft.VSTS.Common.Blocked", "System.Reason"];
 const doneStates = new Set(["closed", "done", "completed", "resolved", "removed"]);
 const activeStates = new Set(["active", "committed", "in progress", "doing"]);
 const delay = (milliseconds: number) => new Promise(resolve => setTimeout(resolve, milliseconds));
@@ -28,9 +27,12 @@ export class AzureDevOpsProvider implements EngineeringDeliveryProvider {
           await delay(retryAfter * 1000);
           continue;
         }
-        if (!response.ok) {
+        if (!response.ok || response.status === 203 || !response.headers.get("content-type")?.includes("application/json")) {
           const error = new Error(`Azure DevOps returned ${response.status}.`) as AzureError;
-          error.status = response.status;
+          error.status = response.status === 203 ? 401 : response.status;
+          const detail = await response.json().catch(() => ({})) as { typeKey?: string; message?: string };
+          error.azureType = typeof detail.typeKey === "string" ? detail.typeKey.replace(/[^a-zA-Z0-9_.]/g, "").slice(0, 100) : undefined;
+          console.error("Azure request failed", { status: error.status, type: error.azureType, operation: path.split("/_apis/")[1]?.split("?")[0], message: typeof detail.message === "string" ? detail.message.replaceAll(this.config.credential, "[redacted]").slice(0, 400) : "Non-JSON Azure response" });
           error.retryAfter = Number(response.headers.get("retry-after") ?? 0) || undefined;
           throw error;
         }
@@ -73,8 +75,19 @@ export class AzureDevOpsProvider implements EngineeringDeliveryProvider {
   async getSprintHistory(projectId: string, teamId: string): Promise<ExternalSprintSource> {
     const result = await this.listAllWithMeta<{ id: string; name: string; path: string; attributes?: { startDate?: string; finishDate?: string } }>(`/${encodeURIComponent(projectId)}/${encodeURIComponent(teamId)}/_apis/work/teamsettings/iterations?api-version=7.1`);
     const all: ExternalIteration[] = result.values.map(iteration => ({ id: iteration.id, name: iteration.name, path: iteration.path, startDate: iteration.attributes?.startDate ?? null, finishDate: iteration.attributes?.finishDate ?? null })).filter(iteration => Boolean(iteration.startDate && iteration.finishDate)).sort((left, right) => `${right.finishDate}:${right.id}`.localeCompare(`${left.finishDate}:${left.id}`));
-    const iterations = all.slice(0, 50), sourceRevision = await this.revision(iterations.map(iteration => `${iteration.id}:${iteration.path}:${iteration.startDate}:${iteration.finishDate}`).join("|"));
+    const iterations = all, sourceRevision = await this.revision(iterations.map(iteration => `${iteration.id}:${iteration.path}:${iteration.startDate}:${iteration.finishDate}`).join("|"));
     return { iterations, pagesRead: result.pages, sourceRevision, retrievedAt: new Date().toISOString(), complete: true, truncated: all.length > iterations.length };
+  }
+  async getProjectSprintHistory(projectId: string): Promise<ExternalSprintSource> {
+    const teams = await this.getTeams(projectId), iterations = new Map<string, ExternalIteration>();
+    let pagesRead = 1;
+    for (const team of teams) {
+      const history = await this.getSprintHistory(projectId, team.id);
+      pagesRead += history.pagesRead;
+      for (const iteration of history.iterations) iterations.set(iteration.id, iteration);
+    }
+    const rows = [...iterations.values()].sort((a, b) => a.id.localeCompare(b.id));
+    return { iterations: rows, pagesRead, sourceRevision: await this.revision(JSON.stringify(rows)), retrievedAt: new Date().toISOString(), complete: true, truncated: false };
   }
   async getCurrentSprint(projectId: string, teamId: string) { const rows = await this.listAll<{ id: string; name: string; path: string; attributes?: { startDate?: string; finishDate?: string } }>(`/${encodeURIComponent(projectId)}/${encodeURIComponent(teamId)}/_apis/work/teamsettings/iterations?$timeframe=current&api-version=7.1`), iteration = rows[0]; return iteration ? { id: iteration.id, name: iteration.name, path: iteration.path, startDate: iteration.attributes?.startDate ?? null, finishDate: iteration.attributes?.finishDate ?? null } : null; }
 
@@ -88,16 +101,26 @@ export class AzureDevOpsProvider implements EngineeringDeliveryProvider {
 
   async getAdvancedWorkItems(projectId: string, teamId?: string | null): Promise<AdvancedWorkItemSource> {
     const scope = teamId ? `/${encodeURIComponent(projectId)}/${encodeURIComponent(teamId)}` : `/${encodeURIComponent(projectId)}`;
-    const wiql = await this.query<{ workItems: Array<{ id: number }> }>(`${scope}/_apis/wit/wiql?$top=20000&api-version=7.1`, { query: "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project ORDER BY [System.Id]" });
-    const ids = [...new Set(wiql.workItems.map(item => item.id))], rawItems: Item[] = [];
+    const ids: number[] = []; let pagesRead = 0, lastId = 0;
+    for (;;) {
+      const page = await this.query<{ workItems: Array<{ id: number }> }>(`${scope}/_apis/wit/wiql?$top=1000&api-version=7.1`, { query: `SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project AND [System.Id] > ${lastId} ORDER BY [System.Id]` });
+      pagesRead += 1;
+      if (!page.workItems.length) break;
+      const next = page.workItems.map(item => item.id);
+      if (next.some(id => !Number.isInteger(id) || id <= lastId)) throw new Error("Azure returned invalid work-item pagination.");
+      ids.push(...next); lastId = Math.max(...next);
+      if (next.length < 1000) break;
+      if (ids.length >= 50000) throw new Error("Azure Project exceeds the supported 50,000 work-item sync size; no snapshot was replaced.");
+    }
+    const rawItems: Item[] = [];
     for (let index = 0; index < ids.length; index += 200) {
-      const batch = await this.query<{ value: Item[] }>(`/${encodeURIComponent(projectId)}/_apis/wit/workitemsbatch?api-version=7.1`, { ids: ids.slice(index, index + 200), fields: advancedFields, $expand: "Relations", errorPolicy: "Omit" });
+      const batch = await this.query<{ value: Item[] }>(`/${encodeURIComponent(projectId)}/_apis/wit/workitemsbatch?api-version=7.1`, { ids: ids.slice(index, index + 200), $expand: "Relations", errorPolicy: "Omit" });
       rawItems.push(...batch.value);
     }
     const items = rawItems.map(item => this.toExternalWorkItem(projectId, item));
     const revisionInput = items.map(item => `${item.externalId}:${item.externalRevision}`).sort().join("|") || "EMPTY";
     const sourceRevision = await this.revision(revisionInput);
-    return { items, pagesRead: 1 + Math.ceil(ids.length / 200), sourceRevision, retrievedAt: new Date().toISOString(), complete: ids.length < 20000 && rawItems.length === ids.length };
+    return { items, pagesRead: pagesRead + Math.ceil(ids.length / 200), sourceRevision, retrievedAt: new Date().toISOString(), complete: rawItems.length === ids.length };
   }
 
   private toExternalWorkItem(projectId: string, item: Item): ExternalWorkItem {
@@ -109,5 +132,10 @@ export class AzureDevOpsProvider implements EngineeringDeliveryProvider {
   }
 
   async getSprintMetrics(projectId: string, teamId: string, iterationId: string): Promise<SprintMetrics> { const iteration = (await this.getIterations(projectId, teamId)).find(value => value.id === iterationId); if (!iteration) throw new Error("Current Azure iteration was not found."); const result = await this.request<{ workItemRelations: Array<{ target?: { id: number } }> }>(`/${encodeURIComponent(projectId)}/${encodeURIComponent(teamId)}/_apis/work/teamsettings/iterations/${encodeURIComponent(iterationId)}/workitems?api-version=7.1`), ids = [...new Set(result.workItemRelations.map(value => value.target?.id).filter((id): id is number => typeof id === "number"))], items = await this.hydrate(projectId, ids), completed = items.filter(item => doneStates.has(String(item.fields["System.State"] ?? "").toLowerCase())).length, total = items.length, progress = total ? Math.round(completed/total*100) : 0, daysRemaining = iteration.finishDate ? Math.ceil((new Date(iteration.finishDate).getTime() - Date.now()) / 86400000) : null, elapsed = iteration.startDate && iteration.finishDate ? Math.max(0, Math.min(1, (Date.now() - new Date(iteration.startDate).getTime()) / (new Date(iteration.finishDate).getTime() - new Date(iteration.startDate).getTime()))) : null, health = daysRemaining !== null && daysRemaining < 0 && progress < 100 ? "OVERDUE" : elapsed !== null && progress + 15 < elapsed * 100 ? "AT_RISK" : "ON_TRACK"; return { ...iteration, totalItems: total, completedItems: completed, activeItems: total - completed, progress, daysRemaining, health, sourceRevision: items.map(item => `${item.id}:${item.rev}`).sort().join("|") || "EMPTY" }; }
-  async getDevelopmentMetrics(projectId: string, teamId?: string | null): Promise<DevelopmentMetrics> { void teamId; const result = await this.query<{ workItems: Array<{ id: number }> }>(`/${encodeURIComponent(projectId)}/_apis/wit/wiql?api-version=7.1`, { query: "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project ORDER BY [System.ChangedDate] DESC" }), items = await this.hydrate(projectId, result.workItems.slice(0, 1000).map(item => item.id)), completed = items.filter(item => doneStates.has(String(item.fields["System.State"] ?? "").toLowerCase())).length, active = items.filter(item => activeStates.has(String(item.fields["System.State"] ?? "").toLowerCase())).length, total = items.length; return { totalItems: total, completedItems: completed, activeItems: active, otherItems: total - completed - active, progress: total ? Math.round(completed/total*100) : 0, sourceRevision: items.map(item => `${item.id}:${item.rev}`).sort().join("|") || "EMPTY" }; }
+  async getDevelopmentMetrics(projectId: string, teamId?: string | null): Promise<DevelopmentMetrics> {
+    const source = await this.getAdvancedWorkItems(projectId, teamId);
+    if (!source.complete) throw new Error("Azure returned incomplete work-item evidence.");
+    const items = source.items, completed = items.filter(item => doneStates.has(item.externalState.toLowerCase())).length, active = items.filter(item => activeStates.has(item.externalState.toLowerCase())).length, total = items.length;
+    return { totalItems: total, completedItems: completed, activeItems: active, otherItems: total - completed - active, progress: total ? Math.round(completed / total * 100) : 0, sourceRevision: source.sourceRevision };
+  }
 }
