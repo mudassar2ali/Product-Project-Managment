@@ -17,10 +17,10 @@ test("generated Sprint metric migration is forward-only seeded and compatible", 
   assert.doesNotMatch(source, /DROP TABLE `sprints`/);
 });
 
-test("Azure provider retrieves bounded dated Team iteration history without mutations", async () => {
+test("Azure provider retrieves dated Team iteration history without mutations", async () => {
   const [contract, provider] = await Promise.all([read("app/integrations/engineering-delivery-provider.ts"), read("app/integrations/azure-devops-provider.ts")]);
   for (const value of ["ExternalSprintSource", "getSprintHistory", "truncated", "pagesRead", "sourceRevision"]) assert.match(contract, new RegExp(value));
-  for (const value of ["getSprintHistory", "listAllWithMeta", "slice(0, 50)", "startDate", "finishDate", "SHA-256", "encodeURIComponent(teamId)"]) assert.match(provider, new RegExp(value.replace(/[()]/g, "\\$&")));
+  for (const value of ["getSprintHistory", "listAllWithMeta", "getProjectSprintHistory", "startDate", "finishDate", "SHA-256", "encodeURIComponent(teamId)"]) assert.match(provider, new RegExp(value.replace(/[()]/g, "\\$&")));
   assert.doesNotMatch(provider, /method:\s*["'](?:PATCH|PUT|DELETE)/);
 });
 
@@ -46,7 +46,7 @@ test("metric API is independently permission governed and returns allowlisted ev
 test("Sprint UI exposes accessible source-labelled delivery history and policy evidence", async () => {
   const [center, panel, shell, styles] = await Promise.all([read("app/delivery/sprint-center.tsx"), read("app/integrations/azure-sync-panel.tsx"), read("app/command-center-shell.tsx"), read("app/globals.css")]);
   for (const value of ["Open delivery evidence", "SOURCE-LABELLED DELIVERY EVIDENCE", "Velocity history", "Daily burndown evidence", "Calculation and policy evidence", "Source revision", "<table>"]) assert.match(center, new RegExp(value));
-  for (const value of ["Sync work + Sprint evidence", "metric snapshots", "daily burndown points", "Sprint metrics need a Team"]) assert.match(panel, new RegExp(value.replace("+", "\\+")));
+  for (const value of ["Sync work + Sprint evidence", "metric snapshots", "daily burndown points", "Project-wide sprint metrics"]) assert.match(panel, new RegExp(value.replace("+", "\\+")));
   assert.match(shell, /Stage 2 · Step 9/);
   for (const value of ["sprint-metrics-evidence", "delivery-metric-grid", "metric-evidence-columns", "calculation-evidence"]) assert.match(styles, new RegExp(value));
 });
